@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="156" width="369" 
+	 defaultButton="{btn1}" xmlns:ns1="*" showStatusBar="false" showGripper="false" resizable="false" minimizable="false" 
+	 maximizable="false" backgroundColor="#f2f2f2" showTitleBar="false" close="closing()" title=""
+	 creationComplete="creationComplete()" systemChrome="standard" type="utility">
+ 
+<!-- Script -->
+	<mx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import mx.events.FlexEvent;
+			import util.*;
+
+			private var callback : Function = null;
+			private var buttons : Array = null;
+			private var focus : int = 0;
+			private var message : String = null;
+			private var selection : String = '';
+			
+			private static var isDisplaying : Boolean = false;
+			
+			// Convenience functions
+			public function goUnsavedChanges(parent : Object, name : String, doneFn : Function = null) : void
+			{
+				go(parent, '“' + short(name) + '” has been modified.  Save changes?', ['Save', 'Discard', 'Cancel'], 0, doneFn);
+			}
+			
+			public function goDelete(parent : Object, name : String, doneFn : Function = null) : void
+			{
+				go(parent, 'Are you sure you want to delete “' + short(name) + '”?', ['Delete', 'Cancel'], 1, doneFn);
+			}
+
+			public static function short(str : String) : String
+			{
+				if (str.length > 30)
+					str = str.substr(0, 27) + "...";
+				return str;
+			}
+			
+			public function go(parent : Object, message : String, buttons : Array = null, 
+			                   focus : int = 0, doneFn : Function = null) : void
+			{
+				var wnd : Window = this;
+
+				if (isDisplaying)
+				{
+					if (doneFn != null)
+						doneFn('');
+					return;
+				}
+				
+				isDisplaying = true;
+				callback = doneFn;
+				
+				if (buttons == null)
+					buttons = ["OK"];
+				this.buttons = buttons;
+				this.focus = focus;
+				this.message = message;
+
+				Interface.makeWindowModal(this, parent);
+				open(true);
+				Interface.centerWindowInParent(this, parent as DisplayObject);
+			}
+			
+			private function creationComplete() : void
+			{
+				txtMessage.text = message;
+				var uiButtons : Array;
+				
+				switch (buttons.length)
+				{
+					case 1:
+						btn0.visible = false;
+						btn1.visible = false;
+						btn2.label = buttons[0] as String;
+						uiButtons = [btn2];
+						break;
+					case 2:
+						btn0.visible = false;
+						btn1.label = buttons[0] as String;
+						btn2.label = buttons[1] as String;
+						uiButtons = [btn1, btn2];
+						break;
+					case 3:
+						btn0.label = buttons[0] as String;
+						btn1.label = buttons[1] as String;
+						btn2.label = buttons[2] as String;
+						uiButtons = [btn0, btn1, btn2];
+						break;
+				}
+				
+				var btn : Button = uiButtons[focus] as Button;
+				btn.setFocus();
+				btn.styleName = "primaryButton";
+				defaultButton = btn;
+			}
+			
+			private function btnClicked(event : Event) : void
+			{
+				// We will trigger the callback after the window is closed.
+				selection = event.target.label;
+				close();
+			}
+			
+			private function closing() : void
+			{
+				if (callback != null)
+				{
+					callback(selection);
+					callback = null;
+				}
+					
+				isDisplaying = false;
+			}
+		]]>
+	</mx:Script>	 
+	 
+<!-- Controls -->	 
+	<mx:Image id="imgIcon" x="10" y="10" source="@Embed(source='img/Warning32.png')"/>
+	<mx:TextArea id="txtMessage" backgroundAlpha="0.0" borderStyle="none" textAlign="left" editable="false" wordWrap="true" text="Don't run with scissors." bottom="55" top="16" left="50" right="10" fontFamily="Lucida Grande,Tahoma,Arial" fontWeight="bold" selectable="false" fontSize="11"/>
+	<mx:Canvas height="47" left="50" right="0" bottom="0">
+		<mx:Button fillAlphas="[1.0, 1.0, 1.0, 1.0]" width="75" id="btn0" click="btnClicked(event)" label="0" right="176" bottom="10"/>
+		<mx:Button fillAlphas="[1.0, 1.0, 1.0, 1.0]" width="75" id="btn1" click="btnClicked(event)" label="1" right="93" bottom="10"/>
+		<mx:Button fillAlphas="[1.0, 1.0, 1.0, 1.0]" width="75" id="btn2" click="btnClicked(event)" label="2" right="10" bottom="10"/>
+		<!--<mx:HRule left="0" right="0" bottom="45"/>-->
+	</mx:Canvas>
+ </mx:Window>

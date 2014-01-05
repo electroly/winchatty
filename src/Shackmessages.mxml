@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="656" width="754" minHeight="430" minWidth="664"
+	 title="Shackmessages" xmlns:ns1="*"   
+	 showStatusBar="false" showGripper="true" backgroundColor="#F2F2F2" systemChrome="standard" type="normal" 
+	 resizable="true" minimizable="true" maximizable="true" xmlns:ns2="util.*" verticalScrollPolicy="off" horizontalScrollPolicy="off">
+
+	<mx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import util.*;
+			import controllers.*;
+			import mx.events.FlexEvent;
+			
+			private var controller : MessageController = new MessageController();
+			private var created    : Boolean = false;
+
+			[Bindable] private var currentPage  : int = 1;
+			[Bindable] private var lastPage     : int = 1;
+			[Bindable] private var inProgress   : Boolean = false;
+			[Bindable] private var messages     : ArrayCollection = null;
+
+			public function go(parent : DisplayObject) : void
+			{
+				if (!created)
+				{
+					addEventListener(FlexEvent.CREATION_COMPLETE,
+						function(event : FlexEvent) : void
+						{
+							txtBody.htmlHost = new HTMLHostWithClicks;
+							var font : Object = (OptionsStorage.fontSmoothingType == 1 ? "TahomaAdvanced" : ["Tahoma", "Arial", "Lucida Grande"]);
+							lstMessages.setStyle("fontFamily", font);
+							lstMessages.setStyle("fontSize", OptionsStorage.fontSize);
+							refresh(1);
+							created = true;
+						});
+					
+					open(true);
+					Interface.centerWindowInParent(this, parent);
+				}
+				else
+				{
+					activate();
+				}
+			}
+			
+			private function refresh(page : int = -1) : void
+			{
+				var wnd : DisplayObject = this;
+				inProgress = true;
+				spinner.push();
+				
+				if (page == -1)
+					page = currentPage;
+				
+				var folder : String = ['inbox', 'outbox', 'archive'][viewStack.selectedIndex];
+				
+				colUser.dataField = (folder == 'outbox') ? 'to' : 'from'; 
+				
+				controller.getMessages(folder, page,
+					function success(data : Object) : void
+					{
+						inProgress = false;
+						spinner.pop();
+						messages = new ArrayCollection(data.messages as Array);
+						currentPage = data.current_page;
+						lastPage = data.last_page;
+						
+						if (messages.length > 0)
+							lstMessages.selectedIndex = 0;
+						messageClick();
+						
+						// If this was the first page of the inbox, then update the total
+						// and unread counts in the SessionStorage.
+						if (page == 1 && folder == 'inbox')
+							SessionStorage.setMessageCount(data.unread, data.total);
+					},
+					function failure(error : String) : void
+					{
+						inProgress = false;
+						spinner.pop();
+						new MessageBox().go(wnd, error);
+					});
+			}
+			
+			private function messageClick() : void
+			{
+				if (lstMessages.selectedItem != null)
+				{
+					var html : String;
+					
+					html = ChattyController.formatReplyHTML(lstMessages.selectedItem.body, true);
+					
+					(txtBody.htmlHost as HTMLHostWithClicks).text = html;
+					txtBody.htmlText = html;
+					
+					// If this message is unread, then mark it read after 4 seconds.
+					if (lstMessages.selectedItem.unread == true)
+					{
+						var timer : Timer = new Timer(4 * 1000, 1);
+						var originalID : int = lstMessages.selectedItem.id;
+						timer.addEventListener(TimerEvent.TIMER,
+							function(event : TimerEvent) : void
+							{
+								// If we're still looking at the same post, then mark it read.
+								if (lstMessages.selectedItem != null && lstMessages.selectedItem.id == originalID)
+								{
+									controller.markMessageAsRead(originalID,
+										function success() : void
+										{
+											lstMessages.selectedItem.unread = false;
+											Interface.forceRepaint(lstMessages);
+											
+											var count : Object = SessionStorage.getMessageCount();
+											if (count.unread > 0)
+												count.unread--;
+											SessionStorage.setMessageCount(count.unread, count.total);
+										},
+										function failure(error : String) : void
+										{
+											// Silently ignore.
+										});
+								}
+							});
+						timer.start();
+					}
+				}
+				else
+				{
+					(txtBody.htmlHost as HTMLHostWithClicks).text = '';
+					txtBody.htmlText = "";
+				}
+			}
+			
+			private function fromClick() : void
+			{
+				new ComposeShackmessage().go(this, 
+					lstMessages.selectedItem.from, 
+					null, 
+					null,
+					function() : void
+					{
+						refresh();
+					});
+			}
+			
+			private function toClick() : void
+			{
+				new ComposeShackmessage().go(this, 
+					lstMessages.selectedItem.to, 
+					null, 
+					null,
+					function() : void
+					{
+						refresh();
+					});
+			}
+			
+			private function newMessageClick() : void
+			{
+				new ComposeShackmessage().go(this, 
+					null, 
+					null, 
+					null,
+					function() : void
+					{
+						refresh();
+					});
+			}
+			
+			private function replyClick() : void
+			{
+				if (lstMessages.selectedItem == null)
+					return;
+				
+				new ComposeShackmessage().go(this, 
+					lstMessages.selectedItem.from,
+					"Re: " + lstMessages.selectedItem.subject,
+					"\n\n-----\n" + lstMessages.selectedItem.from + " wrote:\n\n" + Utility.stripTags(lstMessages.selectedItem.body),
+					function() : void
+					{
+						refresh();
+					});
+			}
+			
+			private function forwardClick() : void
+			{
+				if (lstMessages.selectedItem == null)
+					return;
+				
+				new ComposeShackmessage().go(this, 
+					null,
+					"Fwd: " + lstMessages.selectedItem.subject,
+					"\n\n-----\n" + lstMessages.selectedItem.from + " wrote:\n\n" + Utility.stripTags(lstMessages.selectedItem.body),
+					function() : void
+					{
+						refresh();
+					});
+			}
+			
+			private function moveToArchiveClick() : void
+			{
+				if (lstMessages.selectedItem == null)
+					return;
+				
+				var wnd : DisplayObject = this;
+				spinner.push();
+				inProgress = true;
+				
+				controller.archiveMessage(lstMessages.selectedItem.id,
+					function success() : void
+					{
+						spinner.pop();
+						refresh();
+					},
+					function failure(error : String) : void
+					{
+						spinner.pop();
+						new MessageBox().go(wnd, error);
+					});
+			}
+			
+			private function deleteClick() : void
+			{
+				if (lstMessages.selectedItem == null)
+					return;
+				
+				var wnd : DisplayObject = this;
+				spinner.push();
+				inProgress = true;
+				
+				controller.deleteMessage(lstMessages.selectedItem.id,
+					function success() : void
+					{
+						spinner.pop();
+						refresh();
+					},
+					function failure(error : String) : void
+					{
+						spinner.pop();
+						new MessageBox().go(wnd, error);
+					});
+			}
+		]]>
+	</mx:Script>
+	
+	<mx:Canvas height="45" backgroundColor="#F7F7F7" left="0" right="0" top="0">
+		<mx:Image left="0" top="0" height="45" width="100%" source="@Embed(source='img/ToolbarBg.png')" scaleContent="true" maintainAspectRatio="false"/>
+		<mx:LinkButton x="0" y="0" width="45" height="45" paddingTop="6" toolTip="Compose new Shackmessage..." click="newMessageClick()"
+			icon="{Icons.Pencil32}" />
+		<mx:LinkButton x="45" y="0" width="45" height="45" paddingTop="3" toolTip="Refresh" click="refresh()"
+			visible="{!spinner.visible}" icon="{Icons.Refresh32}"/>
+		<mx:LinkButton id="btnReply" x="90" y="0" width="45" height="45" paddingTop="1" toolTip="Reply..." click="replyClick()"
+			enabled="{lstMessages.selectedItem != null}" icon="{btnReply.enabled ? Icons.Reply32 : Icons.ReplyDisabled32}"/>
+		<mx:LinkButton id="btnForward" x="135" y="0" width="45" height="45" paddingTop="1" toolTip="Forward..." click="forwardClick()"
+			enabled="{lstMessages.selectedItem != null}" icon="{btnForward.enabled ? Icons.Forward32 : Icons.ForwardDisabled32}"/>
+		<mx:LinkButton id="btnDelete" x="180" y="0" width="45" height="45" paddingTop="3" toolTip="Delete" click="deleteClick()" 
+			enabled="{!inProgress &amp;&amp; lstMessages.selectedItem != null}" icon="{btnDelete.enabled ? Icons.Delete32 : Icons.DeleteDisabled32}"/>
+		<mx:ToggleButtonBar dataProvider="viewStack" id="buttonBar" selectedIndex="0" right="10" top="10" 
+			enabled="{!inProgress}"/>
+	</mx:Canvas>
+
+	<mx:Button icon="@Embed(source='img/FarLeft16.png')" width="32" bottom="10" right="249" enabled="{currentPage &gt; 1 &amp;&amp; !inProgress}" click="refresh(1)"/>
+	<mx:Button icon="@Embed(source='img/Left16.png')" width="32" bottom="10" right="209" enabled="{currentPage &gt; 1 &amp;&amp; !inProgress}" click="refresh(currentPage - 1)"/>
+	<mx:Button icon="@Embed(source='img/Right16.png')" width="32" bottom="10" right="50" enabled="{currentPage &lt; lastPage &amp;&amp; !inProgress}" click="refresh(currentPage + 1)"/>
+	<mx:Button icon="@Embed(source='img/FarRight16.png')" width="32" bottom="10" right="10" enabled="{currentPage &lt; lastPage &amp;&amp; !inProgress}" click="refresh(lastPage)"/>
+	<mx:Canvas width="111" height="27" borderStyle="solid" bottom="10" right="90" cornerRadius="4" backgroundColor="#FFFFFF">
+		<mx:Label y="3" text="{currentPage} of {lastPage}" textAlign="center" fontWeight="bold" left="1" right="1"/>
+	</mx:Canvas>
+	<mx:VDividedBox left="-1" right="-1" top="45" bottom="45" liveDragging="true" 
+			enabled="{messages != null &amp;&amp; messages.length > 0}">
+		<mx:Canvas width="100%" height="35%">
+			<mx:VBox width="100%" height="100%" verticalGap="0">
+				<mx:Canvas height="25" width="100%" borderStyle="none" backgroundColor="#F2F2F2" id="canvasHeader" horizontalScrollPolicy="off">
+					<mx:Label text="From:" x="10" y="4"/>
+					<mx:LinkButton id="btnFrom" paddingTop="2" paddingBottom="0" x="44" y="1" fontWeight="bold" 
+						textAlign="left" height="24" click="fromClick()" focusAlpha="20" label="{lstMessages.selectedItem.from}" width="120"/>
+					<mx:Label text="To:" x="182" y="4"/>
+					<mx:LinkButton id="btnTo" paddingTop="2" paddingBottom="0" x="204" y="1" fontWeight="bold" 
+						textAlign="left" height="24" click="toClick()" focusAlpha="20" label="{lstMessages.selectedItem.to}" width="120"/>
+					<mx:Label text="Subject:" x="354" y="4"/>
+					<mx:Label y="4" text="{lstMessages.selectedItem.subject}" fontWeight="bold" left="411" right="12"/>
+				</mx:Canvas>				
+				<mx:HTML width="100%" height="100%" borderStyle="solid" id="txtBody" minHeight="100"/>
+			</mx:VBox>
+		</mx:Canvas>
+		<mx:DataGrid width="100%" height="100%" minHeight="100" editable="false" resizableColumns="false" allowMultipleSelection="false" sortableColumns="false" draggableColumns="false" 
+			selectionDuration="0" useRollOver="false" verticalGridLines="false" dataProvider="{messages}" fontSize="11" showHeaders="false"
+			id="lstMessages" change="messageClick()">
+			<mx:columns>
+				<mx:DataGridColumn headerText="Subject" dataField="subject" itemRenderer="renderers.MessageRenderer"/>
+				<mx:DataGridColumn headerText="From" width="125" dataField="from" id="colUser" itemRenderer="renderers.MessageRenderer"/>
+				<mx:DataGridColumn headerText="Date" width="160" dataField="date" itemRenderer="renderers.MessageRenderer"/>
+			</mx:columns>
+		</mx:DataGrid>
+	</mx:VDividedBox>
+	<ns2:RefCountedSpinner height="32" width="32" startImmediately="false" delay="65" spinnerColor="#E5E5F0" id="spinner" 
+		spinnerHighlightColor="#007EFF" spinnerShadowColor1="#4CA0FA" spinnerShadowColor2="#99C3F5" spinnerThickness="5" spinnerLineThickness="2" spinnerType="circles" x="52" y="6"/>
+	<mx:ViewStack id="viewStack" visible="false" change="currentPage = 1; refresh()">
+		<mx:Canvas label="Inbox"/>
+		<mx:Canvas label="Sent"/>
+	</mx:ViewStack>
+
+ 	<mx:HRule left="0" right="0" strokeColor="#B7BABC" top="45" height="1"/>	
+</mx:Window>

@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="392" width="596" minHeight="392" minWidth="596"
+	 defaultButton="{btnOK}" title="New Post" xmlns:ns1="*" creationComplete="creationComplete()" 
+	 showStatusBar="false" showGripper="true" backgroundColor="#F2F2F2" systemChrome="standard" type="normal" 
+	 resizable="true" minimizable="true" maximizable="true" verticalScrollPolicy="off" horizontalScrollPolicy="off">
+
+	<mx:Script>
+		<![CDATA[
+			import util.*;
+			import controllers.*;
+			import mx.utils.Base64Encoder;
+
+			[Bindable] private var parentID : int;
+			[Bindable] private var storyID : int;
+			[Bindable] private var parentText : String;
+
+			private var doneCallback : Function;
+			private var threadID : int;
+			
+			public function go(parent : DisplayObject, storyID : int, parentID : int, threadID : int, parentText : String, callback : Function) : void
+			{
+				doneCallback = callback;
+				
+				this.storyID = storyID;
+				this.parentID = parentID;
+				this.threadID = threadID;
+				this.parentText = parentText == null ? "" : parentText;
+				
+				title = (parentID == 0) ? "New Thread" : "Reply";
+				
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function creationComplete() : void
+			{
+				buttonBar.selectedIndex = 0;
+				txtPost.setFocus()
+			}
+			
+			private function htmlParentCreationComplete() : void
+			{				
+				htmlParent.htmlHost = new HTMLHostWithClicks;
+				try
+				{
+					if (parentID != 0)
+					{
+						var html : String = ChattyController.formatReplyHTML(parentText, true);
+						
+						(htmlParent.htmlHost as HTMLHostWithClicks).text = html;
+						htmlParent.htmlText = html;
+					}
+				}
+				catch (error : Error)
+				{}
+			}
+			
+			private function post() : void
+			{
+				enabled = false;
+				
+				var body : String = txtPost.text;
+				var fixedBody : String = "";
+				var i : int;
+				var wnd : DisplayObject = this;
+				
+				fixedBody = Utility.fixNewlines(Utility.quoteCodeShacktag(body));
+
+				new ChattyController().post(parentID, storyID, fixedBody,
+					function success() : void
+					{
+						close();
+						doneCallback();
+					},
+					function failure(error : String) : void
+					{
+						enabled = true;
+						new MessageBox().go(wnd, error);
+					});
+			}
+			
+			private function insertTag(start : String, end : String) : void
+			{
+				var startIndex : int = txtPost.selectionBeginIndex;
+				var endIndex : int = txtPost.selectionEndIndex;
+				
+				txtPost.text = txtPost.text.substr(0, startIndex)
+				             + start
+				             + txtPost.text.substring(startIndex, endIndex)
+				             + end
+				             + txtPost.text.substr(endIndex);
+				txtPost.selectionBeginIndex = startIndex + start.length;
+				txtPost.selectionEndIndex = startIndex + start.length;
+				txtPost.setFocus();
+			}
+			
+			private function editPreviewClick() : void
+			{
+				if (buttonBar.selectedIndex == 0)
+				{
+					txtPost.setFocus();
+				}
+				else
+				{
+					// Preview
+					var body : String = txtPost.text;
+					
+					var replacements : Array = [
+						{left: "r{", right: "}r", css: "jt_red"},
+						{left: "g{", right: "}g", css: "jt_green"},
+						{left: "p[", right: "]p", css: "jt_pink"},
+						{left: "e[", right: "]e", css: "jt_olive"},
+						{left: "y{", right: "}y", css: "jt_yellow"},
+						{left: "b{", right: "}b", css: "jt_blue"},
+						{left: "l[", right: "]l", css: "jt_lime"},
+						{left: "n[", right: "]n", css: "jt_orange"},
+						{left: "/[", right: "]/", css: "jt_italic"},
+						{left: "*[", right: "]*", css: "jt_bold"},
+						{left: "_[", right: "]_", css: "jt_underline"},
+						{left: "-[", right: "]-", css: "jt_strike"},
+						{left: "s[", right: "]s", css: "jt_sample"},
+						{left: "q[", right: "]q", css: "jt_quote"},
+						{left: "o[", right: "]o", css: "jt_spoiler"},
+						{left: "/{{", right: "}}/", css: "jt_code"} ];
+					
+					var replacement : Object;
+					
+					while (body.indexOf("\r") >= 0)
+						body = body.replace("\r", "<br/>");
+					
+					for each (replacement in replacements)
+					{
+						while (body.indexOf(replacement.left) >= 0)
+							body = body.replace(replacement.left, "<span class='" + replacement.css + "'>");
+						while (body.indexOf(replacement.right) >= 0)
+							body = body.replace(replacement.right, "</span>");
+					}
+
+					var bodyCss : String = "";//body { background: #222222; color: white; } a { color: #4444FF; }";
+
+					var css : String =
+						"<style>" +
+						"body { padding: 5px; }" + bodyCss +  
+						"* { font-family: Tahoma; font-size: " + OptionsStorage.fontSize.toString() + "px; }" +
+						".jt_red          { color: #f00; }" + 
+						".jt_green        { color: #8dc63f; }" +
+						".jt_pink         { color: #f49ac1; }" +
+						".jt_olive        { color: olive; }" +
+						".jt_fuchsia      { color: #c0ffc0; }" +
+						".jt_yellow       { color: #ffde00; }" +
+						".jt_blue         { color: #44aedf; }" +
+						".jt_lime         { color: #c0ffc0; }" +
+						".jt_orange       { color: #f7941c; }" +
+						".jt_italic       { font-style: italic; }" +
+						".jt_bold         { font-weight: bold; }" +
+						".jt_underline    { text-decoration: underline; }" +
+						".jt_strike       { text-decoration: line-through; }" +
+						".jt_sample       { font-size: 80%; line-height: 10px; }" +
+						".jt_quote        { font-family: Times New Roman; font-size: 110%; }" +
+						".jt_spoiler      { cursor: help; color: #383838; background-color: #383838; }" +
+						".jt_spoiler_show { color: #f00; }" +
+						".jt_codesmall    { font-family: Courier New; }" +
+						".jt_code         { display: block; font-family: Courier New; border-left: 1px solid #666; padding: 3px 0 3px 10px; margin: 5px 0 5px 10px; }" +
+						"div.fpauthor_168952 .jt_wtf242, div.olauthor_168952  { color: #808080; }" +
+						"</style>";
+					var html : String = /*"By: <b>" + OptionsStorage.username + "</b><br/>" +*/ body;
+					
+					htmlPreview.htmlText = "<body>" + css + html + "</body>" 
+				}
+			}
+		]]>
+	</mx:Script>	
+
+	<mx:Canvas x="0" y="0" width="594" height="36" backgroundColor="#F7F7F7" borderStyle="none">
+		<mx:LinkButton x="3" y="4" icon="@Embed(source='img/Bold16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('*[', ']*')" id="btnBold"/>
+		<mx:LinkButton x="31" y="4" icon="@Embed(source='img/Italic16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('/[', ']/')"/>
+		<mx:LinkButton x="59" y="4" icon="@Embed(source='img/Underline16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('_[', ']_')"/>
+		<mx:LinkButton x="87" y="4" icon="@Embed(source='img/Strike16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('-[', ']-')"/>
+		<mx:LinkButton x="122" y="4" icon="@Embed(source='img/BallBlue16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('b{', '}b')"/>
+		<mx:LinkButton x="150" y="4" icon="@Embed(source='img/BallGreen16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('g{', '}g')"/>
+		<mx:LinkButton x="178" y="4" icon="@Embed(source='img/BallLime16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('l[', ']l')"/>
+		<mx:LinkButton x="206" y="4" icon="@Embed(source='img/BallOlive16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('e[', ']e')"/>
+		<mx:LinkButton x="234" y="4" icon="@Embed(source='img/BallYellow16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('y{', '}y')"/>
+		<mx:LinkButton x="262" y="4" icon="@Embed(source='img/BallOrange16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('n[', ']n')"/>
+		<mx:LinkButton x="290" y="4" icon="@Embed(source='img/BallRed16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('r{', '}r')"/>
+		<mx:LinkButton x="318" y="4" icon="@Embed(source='img/BallPink16.png')" enabled="{viewStack.selectedIndex == 0}" width="28" height="28" click="insertTag('p[', ']p')"/>
+		<mx:LinkButton x="353" y="4" width="63" height="28" label="Spoiler" enabled="{viewStack.selectedIndex == 0}" click="insertTag('o[', ']o')"/>
+		<mx:LinkButton x="416" y="4" width="49" height="28" label="Small" enabled="{viewStack.selectedIndex == 0}" click="insertTag('s[', ']s')" fontSize="10"/>
+		<mx:LinkButton x="465" y="4" width="33" height="28" label="“”" enabled="{viewStack.selectedIndex == 0}" click="insertTag('q[', ']q')"/>
+		<mx:LinkButton x="498" y="4" width="51" height="28" label="Code" enabled="{viewStack.selectedIndex == 0}" click="insertTag('/{{', '}}/')"/>
+		<mx:VRule x="118" y="10" height="16"/>
+	</mx:Canvas>
+
+	<mx:ProgressBar x="187.5" y="365" height="14" label=" " indeterminate="true" width="137" id="progressBar" visible="false"/>
+	<mx:ViewStack id="viewStack" left="-1" right="-1" top="36" bottom="45" borderStyle="solid">
+		<mx:Canvas label="Compose" width="100%" height="100%">
+			<mx:TextArea borderStyle="none" x="0" y="0" width="100%" height="100%" id="txtPost" fontFamily="{OptionsStorage.fontSmoothingType == 1 ? 'TahomaAdvanced' : ['Tahoma', 'Arial', 'Lucida Grande']}" fontSize="14"/>
+		</mx:Canvas>
+		<mx:Canvas label="Preview" width="100%" height="100%">
+			<mx:HTML x="0" y="0" width="100%" height="100%" id="htmlPreview" htmlText=""/>
+		</mx:Canvas>
+		<mx:Canvas label="Parent" width="100%" height="100%">
+			<mx:HTML x="0" y="0" width="100%" height="100%" id="htmlParent" htmlText="{parentText}" creationComplete="htmlParentCreationComplete()"/>
+		</mx:Canvas>
+	</mx:ViewStack>
+	<mx:Button label="Post" width="76" id="btnOK" styleName="primaryButton" click="post()" bottom="10" right="94"/>
+	<mx:Button label="Cancel" width="76" click="close()" bottom="10" right="10"/>
+	<mx:ToggleButtonBar x="10" dataProvider="viewStack" itemClick="editPreviewClick()" id="buttonBar" selectedIndex="1" bottom="10">
+	</mx:ToggleButtonBar>
+	<mx:VRule x="349" y="10" height="16"/>
+
+	<mx:Canvas 
+		x="{0}" y="{btnBold.y}" width="{this.width}" height="{btnBold.height}"
+		backgroundColor="#F7F7F7" backgroundAlpha="0.75" 
+		visible="{!btnBold.enabled}"/>
+ </mx:Window>

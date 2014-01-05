@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Image xmlns:mx="http://www.adobe.com/2006/mxml" scaleContent="false" width="16" height="16" creationComplete="go()" dataChange="go()"
+	verticalAlign="middle" horizontalAlign="center">
+	<mx:Script>
+		<![CDATA[
+			import util.*;
+			
+			private function go() : void
+			{
+				if (data == null)
+					return;
+					
+				if (data.pinned == OptionsStorage.PIN)
+				{
+					source = Icons.Pin16;
+					return;
+				}
+				else if (data.pinned == OptionsStorage.COLLAPSE)
+				{
+					source = Icons.Delete16;
+					return;
+				}
+				
+				if (OptionsStorage.isPostTagged(data.id))
+				{
+					source = Icons.Star16;
+					return;
+				}
+
+				if ((data.author as String).toUpperCase() == OptionsStorage.username.toUpperCase())
+				{
+					source = Icons.ChatBubble16;
+					return;
+				}
+
+				if (data.customFlag > 0)
+				{
+					source = Icons.getFilterIcon(data.customFlag);
+					return;
+				}
+					
+				if (data.participant == true)
+				{
+					source = Icons.ChatBubble16;
+					return;
+				}
+
+				switch (data.category)
+				{
+					case 'political':
+						source = Icons.BulletYellow16;
+						return;
+						
+					case 'nws':
+						source = Icons.BulletRed16;
+						return;
+						
+					case 'informative':
+					case 'interesting':
+						source = Icons.BulletBlue16;
+						return;
+				}
+				
+				source = null;
+			}
+		]]>
+	</mx:Script>
+</mx:Image>

@@ -1,0 +1,437 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="465" width="372" 
+	 defaultButton="{btnOK}" title="WinChatty Options" xmlns:ns1="*" showStatusBar="false"
+	 showGripper="false" backgroundColor="#F2F2F2" resizable="false" minimizable="false" maximizable="false"
+	 systemChrome="standard" type="normal" closing="closing(event)" xmlns:ns2="util.*" horizontalScrollPolicy="off">
+
+	<mx:Script>
+	
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import util.*;
+			import controllers.*;
+
+			private var doneCallback : Function;
+			
+			[Bindable] private var customFilters : ArrayCollection = new ArrayCollection();
+			[Bindable] private var keyBindings : ArrayCollection = new ArrayCollection();
+
+			private var originalCustomFilters : ArrayCollection = new ArrayCollection();
+			private var originalKeyBindings : ArrayCollection = new ArrayCollection();
+			
+			private var didSave : Boolean = false;
+			private var generalLoaded : Boolean = false;
+			private var filtersLoaded : Boolean = false;
+			private var bindingsLoaded : Boolean = false;
+			
+			public function go(parent : DisplayObject, callback : Function) : void
+			{
+				doneCallback = callback;
+				
+				Interface.makeWindowModal(this, parent);
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function setUsernameText() : void
+			{
+				if (OptionsStorage.username == "")
+				{
+					txtUsername.text = "(not logged in)";
+					btnLogin.label = 'Log in...';
+				}
+				else
+				{
+					txtUsername.text = OptionsStorage.username;
+					btnLogin.label = 'Log out';
+				}
+			}
+			
+			private function generalCreationComplete() : void
+			{
+				setUsernameText();
+				chkInvertedColors.selected = OptionsStorage.invertedColors;
+				chkHighlightUnread.selected = OptionsStorage.highlightUnread;
+				chkShowToolbar.selected = OptionsStorage.showToolbar;
+				chkShowShacktags.selected = OptionsStorage.showShacktags;
+				
+				if (OptionsStorage.customTitle == '')
+					chkCustomTitle.selected = false;
+				else
+				{
+					chkCustomTitle.selected = true;
+					txtCustomTitle.text = OptionsStorage.customTitle;
+				}
+
+				txtSize.value = OptionsStorage.fontSize;
+				
+				/*if (OptionsStorage.fontSmoothingType == 1)
+					radAdvanced.selected = true;
+				else
+					radNormal.selected = true;
+					
+				txtGatewayURL.text = OptionsStorage.gatewayURL;*/
+				
+				generalLoaded = true;
+			}
+			
+			private function filtersCreationComplete() : void
+			{
+				chkNWS.selected = OptionsStorage.filter[0];
+				chkInteresting.selected = OptionsStorage.filter[1];
+				chkTangent.selected = OptionsStorage.filter[2];
+				chkStupid.selected = OptionsStorage.filter[3];
+				chkPolitical.selected = OptionsStorage.filter[4];
+
+				// Back up the custom filters list in case the user cancels.
+				for each (var filter : Object in OptionsStorage.customFilters)
+					originalCustomFilters.addItem(filter);
+				refreshCustomFilters();
+				
+				filtersLoaded = true;
+			}
+			
+			private function bindingsCreationComplete() : void
+			{
+				// Back up the key bindings list in case the user cancels.
+				for each (var binding : Object in OptionsStorage.keyBindings)
+					originalKeyBindings.addItem(binding);
+				
+				refreshKeyBindings();
+				bindingsLoaded = true;
+			}
+			
+			private function save() : void
+			{
+				if (generalLoaded)
+				{
+					OptionsStorage.invertedColors = chkInvertedColors.selected;
+					OptionsStorage.highlightUnread = chkHighlightUnread.selected;
+					OptionsStorage.showToolbar = chkShowToolbar.selected;
+					OptionsStorage.showShacktags = chkShowShacktags.selected;
+					OptionsStorage.fontSize = txtSize.value;
+					//OptionsStorage.fontSmoothingType = (radAdvanced.selected ? 1 : 0);
+
+					if (chkCustomTitle.selected)
+						OptionsStorage.customTitle = txtCustomTitle.text;
+					else
+						OptionsStorage.customTitle = '';
+						
+					//OptionsStorage.gatewayURL = txtGatewayURL.text;
+				}
+				
+				if (filtersLoaded)
+				{
+					OptionsStorage.filter[0] = chkNWS.selected;
+					OptionsStorage.filter[1] = chkInteresting.selected;
+					OptionsStorage.filter[2] = chkTangent.selected;
+					OptionsStorage.filter[3] = chkStupid.selected;
+					OptionsStorage.filter[4] = chkPolitical.selected;
+					// Custom filters are written directly to the OptionsStorage as they are modified.
+				}
+				
+				if (bindingsLoaded)
+				{
+					// Nothing to do; these are written directly to the OptionsStorage as they are modified.
+				}
+				
+				OptionsStorage.save();
+				try
+				{
+					doneCallback();
+				}
+				finally
+				{
+					didSave = true;
+					close();
+				}
+			}
+			
+			private function closing(event : Event) : void
+			{
+				if (!didSave)
+				{
+					if (filtersLoaded)
+						OptionsStorage.customFilters = originalCustomFilters;
+					if (bindingsLoaded)
+						OptionsStorage.keyBindings = originalKeyBindings;
+				}
+			}
+			
+			private function addFilterClick() : void
+			{
+				new OptionsFriend().go(this, -1,
+					function success() : void
+					{
+						refreshCustomFilters();
+					});
+			}
+			
+			private function refreshCustomFilters() : void
+			{
+				var filter : Object;
+				var scrollPosition : Number = lstFilters.verticalScrollPosition;
+				
+				customFilters.removeAll();
+				
+				for each (filter in OptionsStorage.customFilters)
+				{
+					var iconClass : Class = null;
+					var typeString : String = "";
+					var applyString : String = "";
+					
+					iconClass = Icons.getFilterIcon(filter.action);
+					
+					switch (filter.type)
+					{
+						case OptionsStorage.FILTER_KEYWORD: typeString = "Keyword"; break;
+						case OptionsStorage.FILTER_SHACKNAME: typeString = "Shacker"; break;
+					}
+					
+					switch (filter.applyTo)
+					{
+						case OptionsStorage.FILTER_IN_BOTH: applyString = "Any Post"; break;
+						case OptionsStorage.FILTER_IN_THREADS: applyString = "Threads"; break;
+						case OptionsStorage.FILTER_IN_REPLIES: applyString = "Replies"; break;
+					}
+					
+					customFilters.addItem({
+						keyword: filter.keyword,
+						icon: iconClass,
+						type: typeString,
+						applyTo: applyString});
+				}
+				
+				lstFilters.verticalScrollPosition = scrollPosition;
+			}
+			
+			private function deleteFilterClick() : void
+			{
+				OptionsStorage.customFilters.removeItemAt(lstFilters.selectedIndex);
+				refreshCustomFilters();
+			}
+			
+			private function changeFilterClick() : void
+			{
+				if (lstFilters.selectedItem == null)
+					return;
+					
+				new OptionsFriend().go(this, lstFilters.selectedIndex,
+					function success() : void
+					{
+						refreshCustomFilters();
+					});
+			}
+			
+			private function refreshKeyBindings() : void
+			{
+				var keyboardCommand : Object;
+				var scrollPosition : Number = lstBindings.verticalScrollPosition;
+				keyBindings.removeAll();
+				
+				for each (keyboardCommand in KeyboardController.keyboardCommands)
+				{
+					// If this is a heading, then the command will be null.
+					if (keyboardCommand.command == null)
+					{
+						keyBindings.addItem(
+							{
+								command: null,
+								name: keyboardCommand.name
+							});
+						continue;
+					}
+					
+					var binding : Object = OptionsStorage.getKeyBinding(keyboardCommand.command);
+					var key1 : String = '';
+					var key2 : String = '';
+					
+					if (binding != null)
+					{
+						if (binding.key1 != null)
+							key1 = KeyboardController.keystrokeName(binding.key1);
+						if (binding.key2 != null)
+							key2 = KeyboardController.keystrokeName(binding.key2);
+					}
+					
+					keyBindings.addItem(
+						{
+							command: keyboardCommand.command,
+							name: keyboardCommand.name,
+							key1: key1,
+							key2: key2
+						});
+				}
+				
+				lstBindings.verticalScrollPosition = scrollPosition;
+			}
+			
+			private function setKeyBinding(which : int) : void
+			{
+				if (lstBindings.selectedItem == null || lstBindings.selectedItem.command == null)
+					return;
+					
+				var command : int = lstBindings.selectedItem.command;
+				
+				new CaptureKeystroke().go(this, 
+					function success(key : uint) : void
+					{
+						OptionsStorage.setKeyBinding(command, which, key);
+						refreshKeyBindings();
+					},
+					function failure() : void
+					{
+					});
+			}
+			
+			private function unbindKeys() : void
+			{
+				if (lstBindings.selectedItem == null || lstBindings.selectedItem.command == null)
+					return;
+				
+				OptionsStorage.removeKeyBinding(lstBindings.selectedItem.command);
+				refreshKeyBindings();
+			}
+			
+			private function restoreBindings() : void
+			{
+				OptionsStorage.resetKeyBindings();
+				refreshKeyBindings();
+			}
+			
+			/*private function pickGatewayURL() : void
+			{
+				new Servers().go(this,
+					function success(url : String) : void
+					{
+						txtGatewayURL.text = url;
+					});
+			}*/
+			
+			private function login() : void
+			{
+				if (OptionsStorage.username == "")
+				{
+					new Login().go(this, 
+						function() : void 
+						{
+							setUsernameText();
+						});
+				}
+				else
+				{
+					OptionsStorage.username = "";
+					OptionsStorage.password = "";
+					OptionsStorage.save();
+					setUsernameText();
+				}
+			}
+		]]>
+	</mx:Script>
+		
+	<mx:HRule left="0" right="0" bottom="45" height="2" visible="false"/>
+	<mx:ViewStack id="viewStack" borderStyle="solid" backgroundColor="#FFFFFF" left="-1" right="-1" top="34" bottom="45">
+		<mx:Canvas label="General" width="100%" height="100%" creationComplete="generalCreationComplete()">
+			<mx:Canvas y="19" height="92" cornerRadius="4" borderStyle="solid" right="11" left="10">
+				<mx:Label x="10" y="16" text="Username:" fontSize="11"/>
+				<mx:Label x="87" y="16" fontSize="11" text="(not logged in)" id="txtUsername" width="157" fontWeight="bold"/>
+				<mx:Button x="269" y="10" label="Log in..." fontSize="11" height="24" click="login()" id="btnLogin"/>
+				<mx:TextArea x="10" y="45" fontSize="11" width="327" height="37" borderStyle="none" editable="false" selectable="false">
+					<mx:text><![CDATA[User credentials and private user data pass through a third party API server at winchatty.com.  This connection uses SSL.]]></mx:text>
+				</mx:TextArea>
+			</mx:Canvas>
+			<mx:Label x="20" y="10" text="Shacknews Account" fontWeight="bold" fontStyle="normal" fontSize="11" opaqueBackground="0xFFFFFF"/>
+		
+			<mx:Canvas y="132" height="164" borderStyle="solid" cornerRadius="4" right="11" left="10">
+				<mx:Label x="10" text="Interface:" fontSize="11" y="12"/>
+				<mx:CheckBox x="87" label="Shacknews color scheme" id="chkInvertedColors" width="250" fontSize="11" y="10"/>
+				<mx:CheckBox x="232" label="Show toolbar" id="chkShowToolbar" width="109" fontSize="11" y="10" visible="false"/>
+				<mx:CheckBox x="87" label="Highlight unread posts" id="chkHighlightUnread" width="250" fontSize="11" y="35"/>
+				<mx:CheckBox x="87" label="Show Shacktags" id="chkShowShacktags" width="250" fontSize="11" y="60"/>
+				<mx:CheckBox x="87" label="Custom title:" id="chkCustomTitle" fontSize="11" y="85" width="97"/>
+				<mx:TextInput id="txtCustomTitle" enabled="{chkCustomTitle.selected}" fontWeight="bold" fontSize="11" y="85" left="183" right="10"/>
+				<mx:Label x="10" text="Font size:" fontSize="11" y="124"/>
+				<mx:NumericStepper x="87" minimum="9" maximum="72" value="12" id="txtSize" fontWeight="bold" y="122" fontSize="11" height="24"/>
+			</mx:Canvas>
+			<mx:Label x="20" text="Chatty" fontWeight="bold" fontStyle="normal" y="123" fontSize="11" opaqueBackground="0xFFFFFF"/>
+		</mx:Canvas>
+		<mx:Canvas label="Filters" width="100%" height="100%" creationComplete="filtersCreationComplete()">
+			<mx:Canvas y="19" height="95" borderStyle="solid" cornerRadius="4" left="10" right="11">
+				<mx:CheckBox x="38" y="10" label="Not Work Safe" selected="true" fillAlphas="[1.0, 0.89, 0.89, 0.89]" id="chkNWS" width="130" fontSize="11"/>
+				<mx:CheckBox x="38" y="35" label="Interesting" selected="true" fillAlphas="[1.0, 0.89, 0.89, 0.89]" id="chkInteresting" width="130" fontSize="11"/>
+				<mx:CheckBox x="204" y="35" label="Tangent" selected="true" fillAlphas="[1.0, 0.89, 0.89, 0.89]" id="chkTangent" width="79" fontSize="11"/>
+				<mx:CheckBox x="204" y="10" label="Stupid" selected="true" fillAlphas="[1.0, 0.89, 0.89, 0.89]" id="chkStupid" width="79" fontSize="11"/>
+				<mx:CheckBox x="38" y="60" label="Political / Religious" selected="true" fillAlphas="[1.0, 0.89, 0.89, 0.89]" id="chkPolitical" width="130" fontSize="11"/>
+				<mx:Image x="14" y="14" source="{chkNWS.selected ? Icons.BulletRed16 : Icons.Delete16}"/>
+				<mx:Image x="14" y="39" source="{chkInteresting.selected ? Icons.BulletBlue16 : Icons.Delete16}"/>
+				<mx:Image x="14" y="64" source="{chkPolitical.selected ? Icons.BulletYellow16 : Icons.Delete16}"/>
+				<mx:Image x="180" y="39" source="{chkTangent.selected ? null : Icons.Delete16}"/>
+				<mx:Image x="179" y="13" source="{chkStupid.selected ? null : Icons.Delete16}"/>
+			</mx:Canvas>
+			<mx:Label x="20" y="10" text="Moderation Flag Filters" fontWeight="bold" fontStyle="normal" fontSize="11" opaqueBackground="0xFFFFFF"/>
+
+			<mx:Canvas height="232" cornerRadius="4" borderStyle="solid" y="131" left="10" right="11">
+				<mx:DataGrid id="lstFilters" height="176" fontSize="11" dataProvider="{customFilters}" 
+						allowMultipleSelection="false" editable="false" resizableColumns="false" showHeaders="false" sortableColumns="false" doubleClickEnabled="true" itemDoubleClick="changeFilterClick()"
+						variableRowHeight="false" wordWrap="false" selectionDuration="0" useRollOver="false" verticalGridLines="false" y="42" borderStyle="inset" left="10" right="10">
+					<mx:columns>
+						<mx:DataGridColumn headerText="" width="20" itemRenderer="renderers.IconRenderer"/>
+						<mx:DataGridColumn headerText="" dataField="keyword"/>
+						<mx:DataGridColumn headerText="" width="75" dataField="applyTo"/>
+						<mx:DataGridColumn headerText="" width="60" dataField="type"/>
+					</mx:columns>
+				</mx:DataGrid>
+				<mx:Button x="10" y="10" label="Add Filter..." fontSize="11" height="24" icon="@Embed(source='img/Add16.png')" click="addFilterClick()"/>
+				<mx:Button x="125" y="10" label="Delete" fontSize="11" height="24" click="deleteFilterClick()" enabled="{lstFilters.selectedItem != null}"/>
+			</mx:Canvas>
+			<mx:Label x="20" y="122" text="Keyword and Username Filters" fontWeight="bold" fontStyle="normal" fontSize="11" opaqueBackground="0xFFFFFF"/>
+		</mx:Canvas>
+		<mx:Canvas label="Key Bindings" width="100%" height="100%" creationComplete="bindingsCreationComplete()">
+			<mx:Button x="10" y="10" label="Bind Key 1..." fontSize="11" height="24" enabled="{lstBindings.selectedItem != null &amp;&amp; lstBindings.selectedItem.command != null}" click="setKeyBinding(1)"/>
+			<mx:Button x="111" y="10" label="Bind Key 2..." fontSize="11" height="24" enabled="{lstBindings.selectedItem != null &amp;&amp; lstBindings.selectedItem.command != null}" click="setKeyBinding(2)"/>
+			<mx:Button y="10" label="Unbind Keys" fontSize="11" height="24" enabled="{lstBindings.selectedItem != null &amp;&amp; lstBindings.selectedItem.command != null}" right="10" click="unbindKeys()"/>
+			<mx:DataGrid 
+				dataProvider="{keyBindings}" doubleClickEnabled="true" itemDoubleClick="setKeyBinding(1)" 
+				fontSize="11" editable="false" allowMultipleSelection="false" resizableColumns="false" sortableColumns="false" 
+				variableRowHeight="false" draggableColumns="false" verticalGridLines="false" left="10" right="10" height="298" id="lstBindings" y="42" borderStyle="inset" showHeaders="false">
+				<mx:columns>
+					<mx:DataGridColumn headerText="Command" dataField="name">
+						<mx:itemRenderer>
+							<mx:Component>
+								<mx:Label text="{data.name}" fontWeight="{data.command == null ? 'bold' : 'normal'}" paddingLeft="{data.command == null ? 5 : 15}"/>
+							</mx:Component>
+						</mx:itemRenderer>
+					</mx:DataGridColumn>
+					<mx:DataGridColumn headerText="Key 1" dataField="key1" width="90"/>
+					<mx:DataGridColumn headerText="Key 2" dataField="key2" width="90"/>
+				</mx:columns>
+			</mx:DataGrid>
+			<mx:Button x="10" label="Restore Defaults" fontSize="11" height="24" click="restoreBindings()" y="348"/>
+		</mx:Canvas>
+	</mx:ViewStack>
+	<mx:TabBar x="10" y="10" dataProvider="viewStack" fontSize="11" height="25">
+	</mx:TabBar>
+	<mx:Button label="Save" width="76" id="btnOK" styleName="primaryButton" click="save()" bottom="10" right="94"/>
+	<mx:Button label="Cancel" width="76" click="close()" bottom="10" right="10"/>
+	
+ </mx:Window>

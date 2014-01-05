@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="544" width="740" minHeight="430" minWidth="740" maxWidth="740"
+	 title="{username}" xmlns:ns1="*" creationComplete="creationComplete()"
+	 showStatusBar="false" showGripper="true" backgroundColor="#F2F2F2" systemChrome="standard" type="normal" 
+	 resizable="true" minimizable="true" maximizable="false" xmlns:ns2="util.*">
+
+	<mx:Script>
+		<![CDATA[
+			import mx.rpc.events.*;
+			import services.ProfileService;
+			import mx.collections.ArrayCollection;
+			import util.*;
+			import controllers.*;
+			import mx.events.FlexEvent;
+			
+			[Bindable] private var username : String;
+			[Bindable] private var profile : Object;
+			
+			private var service : ProfileService = new ProfileService();
+			
+			public function go(username : String, parent : DisplayObject) : void
+			{
+				this.username = username;
+				
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function creationComplete() : void
+			{
+				var wnd : DisplayObject = this;
+				
+				txtBody.htmlHost = new HTMLHostWithClicks;
+				
+				enabled = false;
+				service.getProfile(username,
+					function result(event : ResultEvent) : void
+					{
+						enabled = true;
+						profile = event.result;
+						
+						var css : String = '<style>* { font-family: Tahoma; font-size: 12px; }</style>';
+						var html : String = css + profile.body;
+						
+						(txtBody.htmlHost as HTMLHostWithClicks).text = html;
+						txtBody.htmlText = html;
+					},
+					function fault(event : FaultEvent) : void
+					{
+						new MessageBox().go(wnd, "Unable to get the profile information.");
+						enabled = true;
+					});
+			}
+		]]>
+	</mx:Script>	
+	
+	<mx:HTML id="txtBody" borderStyle="solid" left="10" right="10" top="184" bottom="10" paddingBottom="10" paddingLeft="10" paddingRight="10" paddingTop="10"/>
+	<mx:Canvas x="10" y="10" width="234" height="166" cornerRadius="5" borderStyle="solid">
+				<mx:Label x="10" y="12" text="Registered:"/>
+				<mx:TextInput x="85" y="10" width="137" editable="false" text="{profile.info.registered}"/>
+				<mx:Label x="10" y="42" text="Age:"/>
+				<mx:TextInput x="85" y="40" width="137" editable="false" text="{profile.info.age}"/>
+				<mx:Label x="10" y="72" text="Sex:"/>
+				<mx:TextInput x="85" y="70" width="137" editable="false" text="{profile.info.sex}"/>
+				<mx:Label x="10" y="102" text="Location:"/>
+				<mx:TextInput x="85" y="100" width="137" editable="false" text="{profile.info.location}"/>
+				<mx:Label x="10" y="132" text="Homepage:"/>
+				<mx:TextInput x="85" y="130" width="137" editable="false" text="{profile.info.homepage}"/>
+	</mx:Canvas>
+	<mx:Canvas x="252" y="10" width="234" height="166" cornerRadius="5" borderStyle="solid">
+				<mx:Label x="10" y="12" text="AIM:"/>
+				<mx:TextInput x="85" y="10" width="137" editable="false" text="{profile.info.aim}"/>
+				<mx:Label x="10" y="42" text="Yahoo!:"/>
+				<mx:TextInput x="85" y="40" width="137" editable="false" text="{profile.info.yahoo}"/>
+				<mx:Label x="10" y="72" text="ICQ:"/>
+				<mx:TextInput x="85" y="70" width="137" editable="false" text="{profile.info.icq}"/>
+				<mx:Label x="10" y="102" text="MSN:"/>
+				<mx:TextInput x="85" y="100" width="137" editable="false" text="{profile.info.msn}"/>
+				<mx:Label x="10" y="132" text="GTalk:"/>
+				<mx:TextInput x="85" y="130" width="137" editable="false" text="{profile.info.gtalk}"/>
+	</mx:Canvas>
+	<mx:Canvas x="494" y="10" width="234" height="166" cornerRadius="5" borderStyle="solid">
+				<mx:Label x="10" y="12" text="Steam:"/>
+				<mx:TextInput x="85" y="10" width="137" editable="false" text="{profile.info.steam}"/>
+				<mx:Label x="10" y="42" text="XBox Live:"/>
+				<mx:TextInput x="85" y="40" width="137" editable="false" text="{profile.info.xboxlive}"/>
+				<mx:Label x="10" y="72" text="PSN:"/>
+				<mx:TextInput x="85" y="70" width="137" editable="false" text="{profile.info.psn}"/>
+				<mx:Label x="10" y="102" text="Wii:"/>
+				<mx:TextInput x="85" y="100" width="137" editable="false" text="{profile.info.wii}"/>
+				<mx:Label x="10" y="132" text="XFire:"/>
+				<mx:TextInput x="85" y="130" width="137" editable="false" text="{profile.info.xfire}"/>
+	</mx:Canvas>
+ </mx:Window>

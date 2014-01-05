@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Image xmlns:mx="http://www.adobe.com/2006/mxml" creationComplete="go()" dataChange="go()" 
+	scaleContent="false" width="16" height="16" verticalAlign="middle" horizontalAlign="center">
+	<mx:Script>
+		<![CDATA[
+			import util.OptionsStorage;
+			
+			[Embed(source='img/Dot0.png')]
+			private var dot0 : Class;
+			[Embed(source='img/Dot1.png')]
+			private var dot1 : Class;
+			[Embed(source='img/Dot2.png')]
+			private var dot2 : Class;
+			[Embed(source='img/Dot3.png')]
+			private var dot3 : Class;
+			[Embed(source='img/Dot4.png')]
+			private var dot4 : Class;
+			[Embed(source='img/Dot5.png')]
+			private var dot5 : Class;
+			[Embed(source='img/Dot6.png')]
+			private var dot6 : Class;
+			[Embed(source='img/Dot7.png')]
+			private var dot7 : Class;
+			[Embed(source='img/Dot8.png')]
+			private var dot8 : Class;
+			[Embed(source='img/Dot9.png')]
+			private var dot9 : Class;
+
+			private function go() : void
+			{
+				if (data == null)
+					return;
+					
+				if (data.reply_count <= 1)
+					source = dot0;
+				else if (data.reply_count < 10)
+					source = dot1;
+				else if (data.reply_count < 20)
+					source = dot2;
+				else if (data.reply_count < 40)
+					source = dot3;
+				else if (data.reply_count < 60)
+					source = dot4;
+				else if (data.reply_count < 80)
+					source = dot5;
+				else if (data.reply_count < 160)
+					source = dot6;
+				else if (data.reply_count < 320)
+					source = dot7;
+				else if (data.reply_count < 640)
+					source = dot8;
+				else
+					source = dot9;
+			}
+		]]>
+	</mx:Script>
+</mx:Image>

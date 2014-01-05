@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="324" width="299"
+	 title="Keyword Filter" xmlns:ns1="*" creationComplete="creationComplete()"
+	 showStatusBar="false" showGripper="false" backgroundColor="#F2F2F2" systemChrome="standard" type="normal" 
+	 resizable="false" minimizable="false" maximizable="false" xmlns:ns2="util.*">
+
+	<mx:Script>
+		<![CDATA[
+			import mx.controls.Image;
+			import mx.collections.ArrayCollection;
+			import util.*;
+			import renderers.*;
+
+			private var success : Function;
+			
+			[Bindable] private var types : ArrayCollection = new ArrayCollection([
+				{label: "Post keyword", data: OptionsStorage.FILTER_KEYWORD},
+				{label: "Shackname", data: OptionsStorage.FILTER_SHACKNAME}]);
+
+			[Bindable] private var actions : ArrayCollection = new ArrayCollection([
+				{label: "Nuke from orbit", data: 0, icon: Icons.Delete16},
+				{label: "Aion", data: 30, icon: Icons.Aion16},
+				{label: "Bad Company 2", data: 17, icon: Icons.Battlefield16},
+				{label: "Civilization", data: 20, icon: Icons.Civ16},
+				{label: "Counter-Strike", data: 18, icon: Icons.CSS16},
+				{label: "EVE", data: 19, icon: Icons.Eve16},
+				{label: "Fukung", data: 12, icon: Icons.Fukung16},
+				{label: "Half-Life", data: 11, icon: Icons.HalfLife16},
+				{label: "Left4Dead", data: 15, icon: Icons.L4D16},
+				{label: "StarCraft II", data: 9, icon: Icons.StarCraft16},
+				{label: "Star Trek Online", data: 21, icon: Icons.STO16},
+				{label: "Steam", data: 14, icon: Icons.Steam16},
+				{label: "Team Fortress 2", data: 16, icon: Icons.TF16},
+				{label: "World of Warcraft", data: 10, icon: Icons.WoW16},
+				{label: "Blood Elf", data: 23, icon: Icons.BloodElf16},
+/*				{label: "Blood Elf (Salandria)", data: 28, icon: Icons.Salandria16},*/
+				{label: "Orc", data: 27, icon: Icons.Orc16},
+				{label: "Tauren", data: 25, icon: Icons.Tauren16},
+				{label: "Troll", data: 26, icon: Icons.Troll16},
+				{label: "Undead", data: 29, icon: Icons.Undead16},
+				{label: "Alliance Scum", data: 24, icon: Icons.NightElf16},
+				{label: "Blue ball", data: 1, icon: Icons.BallBlue16},
+				{label: "Green ball", data: 2, icon: Icons.BallGreen16},
+				{label: "Lime ball", data: 3, icon: Icons.BallLime16},
+				{label: "Olive ball", data: 4, icon: Icons.BallOlive16},
+				{label: "Yellow ball", data: 5, icon: Icons.BallYellow16},
+				{label: "Orange ball", data: 6, icon: Icons.BallOrange16},
+				{label: "Red ball", data: 7, icon: Icons.BallRed16},
+				{label: "Pink ball", data: 8, icon: Icons.BallPink16},
+				{label: "Music", data: 13, icon: Icons.Music16},
+				{label: "$300 Jeans", data: 22, icon: Icons.Pants16},
+				]);
+			
+			[Bindable] private var applyOptions : ArrayCollection = new ArrayCollection([
+				{label: "Threads only", data: OptionsStorage.FILTER_IN_THREADS},
+				{label: "Threads and replies", data: OptionsStorage.FILTER_IN_BOTH},
+				{label: "Replies only", data: OptionsStorage.FILTER_IN_REPLIES}]);
+			
+			private var filterIndex : int = -1;
+
+			public function go(parent : DisplayObject, filterIndex : int, success : Function) : void
+			{
+				this.success = success;
+				this.filterIndex = filterIndex;
+				Interface.makeWindowModal(this, parent);
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function creationComplete() : void
+			{
+				if (filterIndex != -1)
+				{
+					var filter : Object = OptionsStorage.customFilters[filterIndex];
+					txtKeyword.text = filter.keyword;
+					
+					for each (var type : Object in types)
+						if (type.data == filter.type)
+							cmbType.selectedItem = type;
+					
+					for each (var action : Object in actions)
+						if (action.data == filter.action)
+							lstAction.selectedItem = action;
+
+					for each (var applyOption : Object in applyOptions)
+						if (applyOption.data == filter.applyTo)
+							cmbApply.selectedItem = applyOption;
+				}
+				
+				txtKeyword.setFocus();
+			}
+			
+			private function save() : void
+			{
+				var filter : Object = {
+					keyword: txtKeyword.text,
+					type: cmbType.selectedItem.data,
+					action: lstAction.selectedItem.data,
+					applyTo: cmbApply.selectedItem.data};
+				
+				if (filterIndex == -1)
+					OptionsStorage.customFilters.addItem(filter);
+				else
+					OptionsStorage.customFilters[filterIndex] = filter;
+				
+				OptionsStorage.sortCustomFilters();
+				
+				success();
+				close();
+			}
+			
+			private function getIcon(item : Object) : Class
+			{
+				if (this[item.icon])
+					return this[item.icon];
+				else
+					return null;
+			}
+		]]>
+	</mx:Script>	
+	<mx:Canvas backgroundColor="#FFFFFF" left="0" right="0" top="0" bottom="46">
+		<mx:Label text="Keyword:" width="71" y="12" x="10" fontSize="11"/>
+		<mx:TextInput y="10" fontWeight="bold" left="93" right="10" id="txtKeyword" fontSize="11"/>
+		<mx:Label x="10" y="43" text="Filter type:" fontSize="11"/>
+		<mx:ComboBox y="41" dataProvider="{types}" id="cmbType" right="10" left="93" fontSize="11" height="24"/>
+		<mx:Label x="10" y="74" text="Apply to:" fontSize="11"/>
+		<mx:ComboBox y="72" dataProvider="{applyOptions}" id="cmbApply" right="10" left="93" fontSize="11" height="24"/>
+		<mx:Label x="10" y="107" text="Nuke or flag:" fontSize="11"/>
+		<mx:DataGrid id="lstAction" showHeaders="false" allowMultipleSelection="false" editable="false" dataProvider="{actions}" 
+					verticalGridLines="false" left="93" right="10" top="103" borderStyle="inset" alternatingItemColors="0xFFFFFF" fontSize="11" bottom="10" fontWeight="bold">
+			<mx:columns>
+				<mx:DataGridColumn itemRenderer="renderers.IconRenderer" width="20"/>
+				<mx:DataGridColumn dataField="label"/>
+			</mx:columns>
+		</mx:DataGrid>
+	</mx:Canvas>
+	<mx:Button label="Save" width="76" id="btnOK" styleName="primaryButton" click="save()" bottom="10" right="94"
+			enabled="{txtKeyword.text.length > 0 &amp;&amp; lstAction.selectedItem != null}"/>
+	<mx:Button label="Cancel" width="76" click="close()" bottom="10" right="10"/>
+	<mx:HRule left="0" right="0" bottom="45" height="2"/>
+
+	
+ </mx:Window>

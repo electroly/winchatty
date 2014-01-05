@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="292" width="388"
+	 defaultButton="{btnOK}" title="About WinChatty" xmlns:ns1="*" creationComplete="creationComplete()"
+	 showStatusBar="false" showGripper="false" backgroundColor="#F2F2F2" systemChrome="standard" type="normal" 
+	 resizable="false" minimizable="false" maximizable="false" verticalScrollPolicy="off" horizontalScrollPolicy="off" xmlns:ns2="util.*">
+
+	<mx:String id="version"/>
+
+	<mx:Script>
+		<![CDATA[
+			import util.*;
+			
+			[Bindable] private var cacheStats : Object = null;
+
+			public function go(parent : DisplayObject) : void
+			{
+				var appXML : XML = NativeApplication.nativeApplication.applicationDescriptor;
+				var air : Namespace = appXML.namespaceDeclarations()[0];
+				version = appXML.air::version;
+				
+				cacheStats = PostCache.getStatistics();
+				
+				Interface.makeWindowModal(this, parent);
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function creationComplete() : void
+			{
+				txtContact.htmlHost = new HTMLHostWithClicks;
+				(txtContact.htmlHost as HTMLHostWithClicks).text = strCSS + strContact;
+
+				txtLinks.htmlHost = new HTMLHostWithClicks;
+				(txtLinks.htmlHost as HTMLHostWithClicks).text = strCSS + strLinks;
+
+				txtThanks.htmlHost = new HTMLHostWithClicks;
+				(txtThanks.htmlHost as HTMLHostWithClicks).text = strCSS + strThanks;
+			}
+			
+			private function clearCache() : void
+			{
+				PostCache.clearCache();
+				cacheStats = PostCache.getStatistics();
+			}
+		]]>
+	</mx:Script>	
+
+	<mx:String id="strCSS">
+		<![CDATA[
+			<style>
+				* {
+					font-family: Tahoma;
+					font-size: 11px;
+					line-height: 150% 
+				}
+				table {
+					border-collapse: collapse;
+				}
+				a {
+					text-decoration: none;
+				}
+				a:hover {
+					text-decoration: underline;
+				}
+				ul {
+					margin-top: 0px;
+					margin-left: -25px;
+				}
+			</style>
+		]]>
+	</mx:String>
+
+	<mx:String id="strContact">
+		<![CDATA[
+			Shackmessage your comments and complaints to <a href="https://www.shacknews.com/messages?method=compose&to=electroly">electroly</a>.
+		]]>
+	</mx:String>
+	
+	<mx:String id="strLinks">
+		<![CDATA[
+			<ul>
+			<li><a href="http://winchatty.com" target="_new">WinChatty Updates</a>
+			<li><a href="http://www.gnu.org/licenses/gpl-2.0.txt">GNU General Public License</a>
+			<li><a href="http://www.shacknews.com">Shacknews.com</a>
+			</ul>
+		]]>
+	</mx:String>
+	
+	<mx:String id="strThanks">
+		<![CDATA[
+			<ul>
+			<li><a href="http://chattyprofil.es/p/ThomW">ThomW</a> - Shack[LOL] service.
+			<li><a href="http://chattyprofil.es/p/action%20wombmate">action wombmate</a> - Application icon.
+			<li><a href="http://iconza.com/">Iconza.com</a> - Pushpin and tag icons.
+			<li><a href="http://tango.freedesktop.org/Tango_Desktop_Project">Tango Desktop Project</a> - Mail reply and forward icons.
+			</ul>
+		]]>
+	</mx:String>
+
+	<mx:Image x="10" y="10" source="App48.png"/>
+	<mx:Label y="10" text="WinChatty {version}" fontWeight="bold" fontSize="18" textAlign="left" x="72"/>
+	<mx:Label x="72" y="34" text="Copyright © 2014, Brian Luft." fontSize="11"/>
+
+	<mx:Canvas borderStyle="solid" backgroundColor="#FFFFFF" left="-1" right="-1" top="61" bottom="45">
+		<mx:Label text="Author:" fontSize="11" left="10" color="#8F8F8F" top="10" height="19"/>
+		<mx:HTML top="11" id="txtContact" left="74" htmlText="{strCSS + strContact}" width="302" horizontalScrollPolicy="off" verticalScrollPolicy="off" height="18"/>
+		<mx:Label text="Links:" fontSize="11" left="10" color="#8F8F8F" top="37" height="19"/>
+		<mx:HTML top="38" id="txtLinks" left="74" htmlText="{strCSS + strLinks}" width="302" horizontalScrollPolicy="off" verticalScrollPolicy="off" height="55"/>
+		<mx:Label text="Credits:" fontSize="11" left="10" color="#8F8F8F" top="101" height="19"/>
+		<mx:HTML top="102" id="txtThanks" left="74" htmlText="{strCSS + strThanks}" width="302" horizontalScrollPolicy="off" verticalScrollPolicy="off" height="70"/>
+	</mx:Canvas>
+
+	<mx:Button label="Close" width="76" id="btnOK" styleName="primaryButton" click="close()" bottom="10" right="10"/>
+	
+ </mx:Window>

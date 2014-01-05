@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="322" width="234"
+	 title="Legend" xmlns:ns1="*" creationComplete="creationComplete()"
+	 showStatusBar="false" showGripper="false" backgroundColor="#F2F2F2" systemChrome="standard" type="normal" 
+	 resizable="false" minimizable="false" maximizable="false">
+
+	<mx:String id="version"/>
+
+	<mx:Script>
+		<![CDATA[
+			import util.*;
+
+			public function go(parent : DisplayObject) : void
+			{
+				Interface.makeWindowModal(this, parent);
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function creationComplete() : void
+			{
+			}
+		]]>
+	</mx:Script>	
+	<mx:Canvas backgroundColor="#FFFFFF" borderStyle="none" left="0" top="0" right="0" bottom="0">
+		<mx:Image y="33" source="@Embed(source='img/Dot1.png')" x="50"/>
+		<mx:Image y="33" source="@Embed(source='img/Dot2.png')" x="65"/>
+		<mx:Image y="33" source="@Embed(source='img/Dot3.png')" x="80"/>
+		<mx:Image y="33" source="@Embed(source='img/Dot4.png')" x="95"/>
+		<mx:Image y="33" source="@Embed(source='img/Dot5.png')" x="110"/>
+		<mx:Image y="33" source="@Embed(source='img/Dot6.png')" x="125"/>
+		<mx:Image y="33" source="@Embed(source='img/Dot7.png')" x="140"/>
+		<mx:Image y="33" source="@Embed(source='img/Dot8.png')" x="156"/>
+		<mx:Image y="95" source="@Embed(source='img/WhiteAge7.png')" x="50"/>
+		<mx:Image y="95" source="@Embed(source='img/WhiteAge6.png')" x="65"/>
+		<mx:Image y="95" source="@Embed(source='img/WhiteAge5.png')" x="80"/>
+		<mx:Image y="95" source="@Embed(source='img/WhiteAge4.png')" x="95"/>
+		<mx:Image y="95" source="@Embed(source='img/WhiteAge3.png')" x="110"/>
+		<mx:Image y="95" source="@Embed(source='img/WhiteAge2.png')" x="125"/>
+		<mx:Image y="95" source="@Embed(source='img/WhiteAge1.png')" x="140"/>
+		<mx:Image y="95" source="@Embed(source='img/WhiteAge0.png')" x="156"/>
+		<mx:Label y="33" text="Small" textAlign="right" x="10"/>
+		<mx:Label y="33" text="Huge" x="186"/>
+		<mx:Label y="10" text="Thread Size" fontWeight="bold" width="121" textAlign="center" x="50"/>
+		
+		<mx:Label y="95" text="Old" textAlign="right" x="19"/>
+		<mx:Label y="95" text="New" x="186"/>
+		<mx:Label y="72" text="Reply Age" fontWeight="bold" width="121" textAlign="center" x="50"/>
+		<mx:Label y="133" text="Moderation Flag" fontWeight="bold" width="121" textAlign="center" x="50"/>
+		<mx:Label y="241" text="Other" fontWeight="bold" width="121" textAlign="center" x="50"/>
+		<mx:Image y="157" source="@Embed(source='img/BulletBlue16.png')" x="47"/>
+		<mx:Image y="181" source="@Embed(source='img/BulletRed16.png')" x="47"/>
+		<mx:Image y="205" source="@Embed(source='img/BulletYellow16.png')" x="47"/>
+		<mx:Image y="264" source="@Embed(source='img/ChatBubble16.png')" x="47"/>
+		<mx:Image y="288" source="@Embed(source='img/Link16.png')" x="47"/>
+		<mx:Label y="263" text="Your conversations" x="71"/>
+		<mx:Label y="287" text="Permalink URL" x="71"/>
+		<mx:Label y="155" text="Informative" x="72"/>
+		<mx:Label y="179" text="Not Work Safe" x="71"/>
+		<mx:Label y="203" text="Political / Religious" x="72"/>
+	</mx:Canvas>
+
+	
+ </mx:Window>

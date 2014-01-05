@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="468" width="578" minHeight="430" minWidth="400" maxWidth="740"
+	 title="{story.story_name}" xmlns:ns1="*" creationComplete="creationComplete()"
+	 showStatusBar="false" showGripper="true" backgroundColor="#F2F2F2" systemChrome="standard" type="utility" 
+	 resizable="true" minimizable="true" maximizable="false" xmlns:ns2="util.*">
+
+	<mx:Script>
+		<![CDATA[
+			import mx.rpc.events.*;
+			import services.ProfileService;
+			import mx.collections.ArrayCollection;
+			import util.*;
+			import controllers.*;
+			import mx.events.FlexEvent;
+			
+			[Bindable] private var story : Object = null;
+			
+			public function go(story : Object, parent : DisplayObject) : void
+			{
+				this.story = story;
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function creationComplete() : void
+			{
+				var wnd : DisplayObject = this;
+				
+				txtBody.htmlHost = new HTMLHostWithClicks;
+				
+				var css : String = '<style>* { font-family: Tahoma; font-size: 12px; }</style>';
+				var html : String = css + story.story_text;
+				
+				(txtBody.htmlHost as HTMLHostWithClicks).text = html;
+				txtBody.htmlText = html;
+			}
+		]]>
+	</mx:Script>	
+
+	<mx:HTML id="txtBody" borderStyle="solid" left="10" right="10" top="88" bottom="10" paddingBottom="10" paddingLeft="10" paddingRight="10" paddingTop="10" cornerRadius="5"/>
+	<mx:Label x="10" y="10" text="{story.story_name}" fontWeight="bold" fontSize="18"/>
+	<mx:Label x="10" y="40" text="By {story.story_author}"/>
+	<mx:Label x="10" y="60" text="{story.story_date}"/>
+ </mx:Window>

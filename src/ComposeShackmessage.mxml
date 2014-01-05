@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="500" width="580" minHeight="500" minWidth="580"
+	 title="Compose Shackmessage" xmlns:ns1="*"
+	 showStatusBar="false" showGripper="true" backgroundColor="#F2F2F2" systemChrome="standard" type="normal" 
+	 resizable="true" minimizable="true" maximizable="true" xmlns:ns2="util.*" verticalScrollPolicy="off" horizontalScrollPolicy="off">
+
+	<mx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			import mx.collections.ArrayCollection;
+			import util.*;
+			import controllers.*;
+			
+			private var controller : MessageController = new MessageController();
+			private var success : Function = null;
+
+			public function go(parent : DisplayObject, recipient : String, subject : String, body : String, success : Function) : void
+			{
+				this.success = success;
+				
+				addEventListener(FlexEvent.CREATION_COMPLETE, 
+					function(event : FlexEvent) : void
+					{
+						if (recipient != null)
+							txtTo.text = recipient;
+						if (subject != null)
+							txtSubject.text = subject;
+						if (body != null)
+							txtPost.text = body;
+						
+						if (recipient == null)
+							txtTo.setFocus();
+						else if (subject == null)
+							txtSubject.setFocus();
+						else
+							txtPost.setFocus();
+					});
+				
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function insertTag(start : String, end : String) : void
+			{
+				var startIndex : int = txtPost.selectionBeginIndex;
+				var endIndex : int = txtPost.selectionEndIndex;
+				
+				txtPost.text = txtPost.text.substr(0, startIndex)
+				             + start
+				             + txtPost.text.substring(startIndex, endIndex)
+				             + end
+				             + txtPost.text.substr(endIndex);
+				txtPost.selectionBeginIndex = startIndex + start.length;
+				txtPost.selectionEndIndex = startIndex + start.length;
+				txtPost.setFocus();
+			}
+			
+			private function sendClick() : void
+			{
+				if (txtTo.text.length == 0)
+				{
+					new MessageBox().go(this, "Enter a recipient.");
+					return;
+				}
+				
+				var wnd : DisplayObject = this;
+				enabled = false;
+				
+				controller.sendMessage(txtTo.text, txtSubject.text, txtPost.text,
+					function sendSuccess() : void
+					{
+						success();
+						close();
+					},
+					function failure(error : String) : void
+					{
+						new MessageBox().go(wnd, error);
+					});
+			}
+		]]>
+	</mx:Script>
+
+ 	<mx:Label x="10" y="14" text="To:"/>
+ 	<mx:TextInput y="10" left="75" right="10" fontWeight="normal" 
+ 		fontFamily="{OptionsStorage.fontSmoothingType == 1 ? 'TahomaAdvanced' : ['Tahoma', 'Arial', 'Lucida Grande']}" fontSize="14" borderStyle="inset" id="txtTo"/>
+ 	<mx:Label x="10" y="49" text="Subject:"/>
+ 	<mx:TextInput y="45" right="10" left="75" fontWeight="normal" 
+ 		fontFamily="{OptionsStorage.fontSmoothingType == 1 ? 'TahomaAdvanced' : ['Tahoma', 'Arial', 'Lucida Grande']}" fontSize="14" borderStyle="inset" id="txtSubject"/>
+ 	<mx:TextArea borderStyle="inset" left="10" right="10" top="80" bottom="45" 
+ 		fontFamily="{OptionsStorage.fontSmoothingType == 1 ? 'TahomaAdvanced' : ['Tahoma', 'Arial', 'Lucida Grande']}" fontSize="14" id="txtPost"/>
+ 	
+	<mx:Button label="Send Message" styleName="primaryButton" right="93" bottom="10" click="sendClick()"/>
+	<mx:Button label="Cancel" width="75" right="10" bottom="10" click="close()"/>
+</mx:Window>

@@ -1,0 +1,1453 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:WindowedApplication xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" borderColor="#C0C0C0" backgroundColor="#F2F2F2"
+		backgroundGradientAlphas="[1.0, 1.0]" backgroundGradientColors="[#F2F2F2, #F2F2F2]" minWidth="700" minHeight="600"
+		initialize="go()" applicationComplete="applicationComplete()" statusBarBackgroundColor="#dcdcdc" showStatusBar="false" closing="closing()" 
+		title="WinChatty" xmlns:ns1="util.*" close="exit()" showGripper="true" horizontalScrollPolicy="off" verticalScrollPolicy="off" themeColor="#99CDFF">
+	<mx:Style source="fonts.css"/>
+	<mx:Style source="yflexskin/yflexskin.css"/>
+	
+	<mx:Script>
+		<![CDATA[
+			import mx.core.Application;
+			import mx.collections.*;
+			import mx.rpc.events.*;
+			import mx.core.UIComponent;
+			import mx.events.MenuEvent;
+			import mx.controls.Menu;
+			import flash.net.*;
+			import util.*;
+			import controllers.*;
+			import services.*;
+			
+			private static var defaultColors     : Array = null;
+			private static var shackColors       : Array = null;
+			
+			private var chattyController         : ChattyController  = new ChattyController();
+			private var messageController        : MessageController = new MessageController();
+			
+			private var baseTitle                : String = "";
+			private var selectedThreadID         : int    = 0;    // Used to persist the thread selection across refreshes.
+			private var selectedReplyID          : String = null; // Used to persist the reply selection across refreshes.
+			private var repliesScrollPosition    : int    = 0;    // Used to persist the scrollbar position of the reply listbox.
+			private var threadID                 : int    = 0;
+			private var storyName                : String = "";
+			private var currentPage              : int    = 0;
+			private var lastPage                 : int    = 0;
+			
+			[Bindable] private var baseChattyURL : String          = "";
+			[Bindable] private var stories       : ArrayCollection = null;
+			[Bindable] private var storyID       : int             = 0;
+			[Bindable] private var chattyURL     : String          = null;
+
+			[Bindable] private var threads       : ArrayCollection = null;
+			[Bindable] private var threadsData   : Object          = null;
+			[Bindable] private var threadURL     : String          = null;
+			[Bindable] private var replies       : ArrayCollection = null;
+
+			[Bindable] private var lolInProgress : Boolean         = false;
+			[Bindable] private var markInProgress: Boolean         = false;
+			[Bindable] public var  menuProvider  : ArrayCollection = null;
+			
+			private var threadLoadInProgress     : Boolean         = false;
+			
+			// Poll for Shackmessages
+			private var messageCountTimer        : Timer = null;
+			
+			// Poll for event ID
+			private var eventTimer : Timer = null;
+			private var lastRefreshEventId : int = 0;
+			private var currentEventId : int = 0;
+			[Bindable] private var newPostsExist : Boolean = false;
+			[Bindable] private var newMessageCount : int = 0;
+			
+			// Upon an error when loading either the story or the thread, we will store
+			// extended information about the error in these variables.  The user can
+			// access it by clicking "Details".
+			private var storyErrorDetails     : String = null;
+			private var threadErrorDetails    : String = null;
+			
+			private function applicationComplete() : void
+			{
+				stage.addEventListener(KeyboardEvent.KEY_DOWN, keyDown);
+				stage.addEventListener(KeyboardEvent.KEY_UP, cancelKeyIfBound);
+				
+				// Set up the reply HTML control to open links in the user's default browser.
+				txtReply.htmlHost = new HTMLHostWithClicks;
+				txtStory.htmlHost = new HTMLHostWithClicks;
+				
+				var wnd : DisplayObject = this;
+
+				// Every 1 minutes, poll the number of Shackmessages.
+				messageCountTimer = new Timer(1 * 60 * 1000);
+				
+				function pollMessageCount(event : TimerEvent) : void
+				{
+					if (OptionsStorage.username.length == 0)
+						return;
+					
+					messageController.getMessageCount(
+						function success(count : Object) : void
+						{
+							SessionStorage.setMessageCount(count.unread, count.total);
+						},
+						function failure(error : String) : void
+						{
+							// Fail silently, since this is an automatic event.
+						});
+				}
+				
+				SessionStorage.events.addEventListener(SessionStorage.MESSAGECOUNT_CHANGE,
+					function messageCountChange(event : Event) : void
+					{
+						//TODO: Update icon when new messages come in.
+						newMessageCount = SessionStorage.getMessageCount().unread;
+						toolbar.repaint();
+						//btnMessages.setStyle("icon", Icons.getMailIcon(SessionStorage.getMessageCount().unread));
+					});
+				
+				messageCountTimer.addEventListener(TimerEvent.TIMER, pollMessageCount);
+				messageCountTimer.start();
+				pollMessageCount(null);
+
+				// Every 5 seconds, poll for the event ID.
+				eventTimer = new Timer(5 * 1000);
+				
+				eventTimer.addEventListener(TimerEvent.TIMER, pollEventId);
+				eventTimer.start();
+				pollEventId(null);
+				
+				hDivider.move(0, -hDivider.y);
+				
+				toolbar.height = toolbar.desiredHeight;
+				toolbar.addEventListener(Toolbar.DESIREDHEIGHT_CHANGE,
+					function(event : Event) : void
+					{
+						toolbar.height = toolbar.desiredHeight;
+					});
+			}
+
+			private function pollEventId(event : TimerEvent) : void
+			{
+				chattyController.getNewestEventId(
+					function success(id : int) : void
+					{
+						currentEventId = id;
+						if (lastRefreshEventId != 0 && lastRefreshEventId != currentEventId)
+						{
+							var count : int = currentEventId - lastRefreshEventId;
+							
+							if (count == 1)
+								btnNewPosts.label = 'There is 1 new comment.';
+							else
+								btnNewPosts.label = 'There are ' + count + ' new comments.';
+								
+							btnNewPosts.setStyle("fontWeight", "bold");
+							btnNewPosts.enabled = true;
+							newPostsExist = true;
+						}
+						else
+						{
+							lastRefreshEventId = id;
+							btnNewPosts.label = 'There are no new comments.';
+							btnNewPosts.setStyle("fontWeight", "normal");
+							btnNewPosts.enabled = false;
+							newPostsExist = false;
+						}
+					},
+					function failure(error : String) : void
+					{
+						btnNewPosts.label = 'Failed to retrieve the number of new comments!';
+						btnNewPosts.setStyle("fontWeight", "normal");
+						btnNewPosts.enabled = false;
+						newPostsExist = false;
+					});
+			}
+		
+			private function go() : void
+			{
+				var appXML : XML = NativeApplication.nativeApplication.applicationDescriptor;
+				var air : Namespace = appXML.namespaceDeclarations()[0];
+				baseTitle = "WinChatty " + appXML.air::version;
+				
+				OptionsStorage.load();
+				resize(true);
+				//PostCache.load();
+
+				title = baseTitle;
+				setFontSizes();
+				updateMenu();
+				
+				setColors();
+
+				OptionsStorage.restoreWindowPosition(this);				
+				
+				if (OptionsStorage.hDivider != -1)	
+					hDivider.getDividerAt(0).x = OptionsStorage.hDivider;
+				if (OptionsStorage.vDivider != -1)
+					vDivider.getDividerAt(0).y = OptionsStorage.vDivider;
+				
+				refreshStory();
+
+				progressBarPush();
+				OptionsStorage.events.addEventListener(OptionsStorage.TAGGED_POSTS_CHANGE,
+					function(event : Event) : void
+					{
+						updateMenu();
+						Interface.forceRepaint(lstThreads);
+						Interface.forceRepaint(lstReplies);
+					});
+				BookmarkController.downloadAll(
+					function() : void
+					{
+						progressBarPop();
+					});
+			}
+			
+			private function setFontSizes() : void
+			{
+				lstThreads.setStyle("fontSize", OptionsStorage.fontSize);
+				lstReplies.setStyle("fontSize", OptionsStorage.fontSize);
+				txtReply.setStyle("fontSize", OptionsStorage.fontSize + 1);
+				resize(false);
+			}
+		
+			private function refreshStory() : void
+			{
+				var obj : Object;
+				
+				btnNewPosts.label = 'Loading...';
+				btnNewPosts.enabled = false;
+				btnNewPosts.setStyle('fontWeight', 'normal');
+				newPostsExist = false;
+				
+				// Simulate a "Mark All Read" by unbolding all threads on the left
+				// while we retrieve the updated list.
+				for each (obj in threads)
+					obj.recent = false;
+				Interface.forceRepaint(lstThreads);
+				
+				for each (obj in replies)
+					obj.recent = false;
+				Interface.forceRepaint(lstReplies);
+
+				// Remember the newest post currently showing.  All posts newer than that
+				// will be bolded after the refresh.
+				if (threads != null && threads.length > 0)
+				{
+					var lastReplyID : int = 0; 
+					for (var i : int = 0; i < threads.length; i++)
+						if (threads[i].last_reply_id > lastReplyID)
+							lastReplyID = threads[i].last_reply_id;
+					OptionsStorage.touchStory(storyID, lastReplyID);
+				}
+
+				if (currentPage == -1)
+				{
+					var pinnedThreads : ArrayCollection = null;
+					var thread  : Object = null;
+					
+					pinnedThreads = OptionsStorage.getPinnedThreads(storyID);
+					threads.removeAll();
+					
+					// Collapsed threads page.  We pull these entirely from our settings file,
+					// no server request needed.
+					for each (thread in pinnedThreads)
+					{
+						if (thread.which == OptionsStorage.COLLAPSE)
+						{
+							thread.data.pinned = OptionsStorage.COLLAPSE;
+							thread.data.recent = false;
+							threads.addItem(thread.data);
+						}
+					}
+					
+					if (threads.length > 0)
+					{
+						selectedThreadID = threads[0].id;
+						lstThreads.selectedItem = threads[0];
+					}
+					else
+					{
+						selectedThreadID = 0;
+					}	
+					
+					btnPage.label = "Exile";
+				}
+				else
+				{
+					loadThreads();
+				}
+				
+				lastRefreshEventId = 0;
+				pollEventId(null);
+			}
+			
+			private function refreshThread() : void
+			{
+				if (selectedThreadID != 0)
+				{
+					var wnd : DisplayObject = this;
+					
+					// Simulate a "Mark All Read" by unbolding all replies on the right
+					// while we retrieve the updated list.
+					for each (var obj : Object in replies)
+						obj.recent = false;
+					Interface.forceRepaint(lstReplies);
+					
+					progressBarPush();
+					chattyController.getThreadTree(selectedThreadID,
+						function success(replies : Array) : void
+						{
+							progressBarPop();
+							lstThreads.selectedItem.replies = replies;
+							threadClick();
+						},
+						function failure() : void
+						{
+							progressBarPop();
+							new MessageBox().go(wnd, "Unable to refresh the thread");
+						});
+				}
+				else
+				{
+					var bgColor : Object = null;
+					
+					replies.removeAll();
+					
+					bgColor = lstThreads.getStyle("backgroundColor");
+					if (bgColor is int)
+						txtReply.htmlText = "<body bgcolor='#" + (bgColor as int).toString(16) + "'></body>";
+					else
+						txtReply.htmlText = "<body bgcolor='" + bgColor.toString() + "'></body>";
+					
+					lstReplies.selectedItem = null;
+					selectedReplyID = null;
+				}
+			}
+		
+			// Called in response to a user request to refresh (like F5)
+			private function refresh() : void
+			{
+				if (newPostsExist)
+					refreshStory();
+			}
+			
+			private function resize(first : Boolean) : void
+			{
+				var newWidth : int = 8 * OptionsStorage.fontSize;
+
+				if (first)
+				{				
+					colThreadCount.width = 19;
+					colThreadCategory.width = 18;
+					colReplyCategory.width = 18;
+					colThreadAuthor.width = newWidth;
+					colReplyAuthor.width = newWidth;
+				}
+			}
+			
+			private var threadClick_previousThreadID : int = 0;
+			private var threadClick_previousLastReplyID : int = 0;
+			private var threadClick_timer : Timer = null;
+			private function threadClick() : void
+			{
+				SessionStorage.setLastReplyID(threadClick_previousThreadID, threadClick_previousLastReplyID);
+				
+				if (threadClick_previousThreadID != lstThreads.selectedItem.id)
+				{
+					threadClick_previousThreadID = lstThreads.selectedItem.id;
+					threadClick_previousLastReplyID = 0;
+				}
+				
+				openThread();				
+
+				for each (var reply : Object in replies)
+					if (reply.id > threadClick_previousLastReplyID)
+						threadClick_previousLastReplyID = reply.id;
+			}
+			
+			private function openThread() : void
+			{
+				if (lstThreads.selectedItem == null)
+					return;
+				
+				// Save their current selection.  On a Refresh, we are retrieving the same
+				// thread, so we should restore their selection.
+				if (threadID > 0 && lstReplies.selectedItem != null)
+					SessionStorage.setThreadState(threadID, lstReplies.verticalScrollPosition, lstReplies.selectedItem.id);
+				
+				parseReplies();
+				
+				threadID = lstThreads.selectedItem.id;
+				var threadState : Object = SessionStorage.getThreadState(threadID);
+				lstReplies.verticalScrollPosition = threadState.scrollPosition;
+				lstReplies.scrollToIndex(threadState.scrollPosition);
+				if (threadState.selectedPostID != -1)
+					restoreSelectedReply(replies, threadState.selectedPostID);
+
+				if (lstThreads.selectedItem.recent)
+				{
+					// If the user is still looking at this thread after 2 seconds, then 
+					// flag it as read.
+					if (threadClick_timer != null)
+						threadClick_timer.stop();
+						
+					var highlightedThreadID : int = lstThreads.selectedItem.id;					
+					threadClick_timer = new Timer(2000);
+					threadClick_timer.addEventListener(TimerEvent.TIMER,
+						function(event : TimerEvent) : void
+						{
+							if (lstThreads.selectedItem != null && lstThreads.selectedItem.id == highlightedThreadID)
+							{
+								lstThreads.selectedItem.recent = false;
+								Interface.forceRepaint(lstThreads);
+							}
+							threadClick_timer = null;
+						});
+						
+					threadClick_timer.start();
+				}
+			}
+			
+			private function replyClick(revealSpoilers : Boolean = false) : void
+			{
+				if (lstReplies.selectedItem != null)
+				{
+					var html : String;
+					var wnd : DisplayObject = this;
+					var threadID : int = lstThreads.selectedItem.id;
+					var postID : int = lstReplies.selectedItem.id;
+					
+					// The root post already has the body text loaded.
+					if (lstReplies.selectedItem.body != null)
+					{
+						html = ChattyController.formatReplyHTML(lstReplies.selectedItem.body, true, revealSpoilers);
+						lblDate.text = lstReplies.selectedItem.date;
+					}
+					// For all other posts, we'll need to hit the cache.
+					else
+					{
+						var cachedObject : Object = PostCache.getPost(storyID, threadID, postID);
+						if (cachedObject != null && cachedObject.body != null)
+						{
+							html = ChattyController.formatReplyHTML(cachedObject.body, true);
+							lblDate.text = cachedObject.date;
+						}
+						else
+						{
+							// The post is not in the cache.  We'll need to load it.  Show the preview in the interim.
+							html = ChattyController.formatReplyHTML(
+								lstReplies.selectedItem.preview + "<br><br><span style='background: #9999aa; color: #ffffff; padding: 3px; font-size: 11px;'>Loading...</span>", 
+								true);
+							lblDate.text = '...';
+
+							// Bail out if there's already a thread load in progress.
+							if (!threadLoadInProgress)
+							{
+								threadLoadInProgress = true;
+								progressBarPush();
+								
+								chattyController.getThreadBodies(threadID,
+									function success(replies : Array) : void
+									{
+										var repliesDict : Dictionary = new Dictionary();
+										
+										threadLoadInProgress = false;
+										progressBarPop();
+										
+										for each (var reply : Object in replies)
+										{
+											repliesDict[parseInt(reply.id)] = {body: reply.body, date: reply.date};
+										}
+										
+										PostCache.setThread(storyID, threadID, repliesDict);
+										openThread();
+									},
+									function failure() : void
+									{
+										threadLoadInProgress = false;
+										progressBarPop();
+										new MessageBox().go(wnd, "Unable to load the post bodies.");
+									});
+							}
+						}
+					}
+					
+					(txtReply.htmlHost as HTMLHostWithClicks).text = html;
+					txtReply.htmlText = html;
+					
+					//lstReplies.selectedItem.recent = false;
+					Interface.forceRepaint(lstReplies);
+				}
+				else
+				{
+					(txtReply.htmlHost as HTMLHostWithClicks).text = '';
+					txtReply.htmlText = "";
+				}
+			}
+			
+			private function showMenu() : void
+			{
+                var menu : Menu = Menu.createMenu(this, menuProvider, false);
+                menu.labelField = "label";
+                menu.iconField = "icon";
+                menu.setStyle("openDuration", 0);
+                menu.setStyle("fontSize", 11);
+                menu.addEventListener("itemClick", menuClick);
+                
+                var rect : Rectangle = toolbar.getButtonBounds("menu");
+                if (rect == null)
+                	return;
+                
+                menu.show(rect.x + 2, rect.y + rect.height - 1);
+			}
+
+			private function composeReply(parentID : int) : void
+			{
+				var parentText : String;
+				
+				if (parentID != 0)
+					parentText = txtReply.htmlText;
+				
+				chattyController.composeReply(this, storyID, 
+					(lstThreads.selectedItem == null) ? 0 : lstThreads.selectedItem.id,
+					parentID, parentText,
+					function success() : void
+					{
+						if (parentID == 0)
+							refreshStory();
+						else
+							refreshThread();
+							
+						// We redisplay the thread list so the Replied icon comes up.
+						// No need to do a server roundtrip though.
+						Interface.forceRepaint(lstThreads);
+					});
+			}
+			
+			private function lolClick(tag : String) : void
+			{
+				var wnd : DisplayObject = this;
+				
+				progressBarPush();
+				lolInProgress = true;
+				
+				chattyController.lolPost(lstReplies.selectedItem, tag,
+					function success() : void
+					{
+						progressBarPop();
+						lolInProgress = false;
+					},
+					function failure(error : String) : void
+					{
+						progressBarPop();
+						lolInProgress = false
+						new MessageBox().go(wnd, 'Failed to tag the post:\n' + error);
+					});
+			}
+			
+			private function closing() : void
+			{
+				OptionsStorage.saveWindowPosition(this);
+				OptionsStorage.hDivider = hDivider.getDividerAt(0).x;
+				OptionsStorage.vDivider = vDivider.getDividerAt(0).y;					
+				OptionsStorage.save();
+				//PostCache.save();
+			}
+			
+			private function cancelKeyIfBound(event : KeyboardEvent) : void
+			{
+				var binding : Object;
+				var keystroke : uint = KeyboardController.keystrokeFromEvent(event);
+				
+				for each (binding in OptionsStorage.keyBindings)
+				{
+					if (binding.key1 == keystroke || binding.key2 == keystroke)
+					{
+						event.preventDefault();
+						return;
+					}
+				}
+			}
+			
+			private function keyDown(event : KeyboardEvent) : void
+			{
+				var binding : Object;
+				var keystroke : uint = KeyboardController.keystrokeFromEvent(event);
+				var i : int;
+
+				function noop() : void
+				{ }
+				
+				for each (binding in OptionsStorage.keyBindings)
+				{
+					if (binding.key1 == keystroke || binding.key2 == keystroke)
+					{
+						event.preventDefault();
+						switch (binding.command)
+						{
+							case KeyboardController.REFRESH:
+								if (!progressBar.visible)
+									refresh();
+								break;
+							/*case KeyboardController.REFRESH_THREAD:
+								if (lstThreads.selectedItem != null)
+									refreshThread();
+								break;*/
+							case KeyboardController.PREVIOUS_REPLY:
+								if (lstReplies.selectedItem != null && lstReplies.selectedIndex > 0)
+								{
+									lstReplies.selectedIndex--;
+									ensureReplyIsVisible();
+									replyClick();
+								}
+								break;
+							case KeyboardController.NEXT_REPLY:
+								if (lstReplies.selectedItem != null && lstReplies.selectedIndex < replies.length - 1)
+								{
+									lstReplies.selectedIndex++;
+									ensureReplyIsVisible();
+									replyClick();
+								}
+								break;
+							case KeyboardController.FIRST_POST:
+							{
+								if (replies.length > 0)
+								{
+									lstReplies.selectedIndex = 0;
+									ensureReplyIsVisible();
+									replyClick();
+								}
+								break;
+							}
+							case KeyboardController.NEWEST_REPLY:
+							{
+								for (i = 0; i < replies.length; i++)
+								{
+									if (replies[i].order == 0)
+									{
+										lstReplies.selectedIndex = i;
+										ensureReplyIsVisible();
+										replyClick();
+									}
+								}
+								
+								break;
+							}
+							case KeyboardController.PARENT_POST:
+							{
+								if (lstReplies.selectedItem == null || lstReplies.selectedIndex == 0)
+									break;
+
+								var currentDepth : int = lstReplies.selectedItem.depth;
+								
+								for (i = lstReplies.selectedIndex; i >= 0; i--)
+								{
+									if (replies[i].depth == currentDepth - 1)
+									{
+										lstReplies.selectedIndex = i;
+										ensureReplyIsVisible();
+										replyClick();
+										break;
+									}
+								}
+								
+								break;
+							}
+							case KeyboardController.REVEAL_SPOILERS:
+							{
+								replyClick(true);
+								break;
+							}
+							case KeyboardController.FIRST_THREAD:
+							{
+								if (lstThreads.selectedItem != null)
+								{
+									lstThreads.selectedIndex = 0;
+									selectedThreadID = lstThreads.selectedItem.id; 
+									selectedReplyID = ''; 									
+									ensureThreadIsVisible();
+									threadClick();
+								}
+								break;
+							}
+							case KeyboardController.LAST_THREAD:
+							{
+								if (lstThreads.selectedItem != null)
+								{
+									lstThreads.selectedIndex = threads.length - 1;
+									selectedThreadID = lstThreads.selectedItem.id; 
+									selectedReplyID = ''; 									
+									ensureThreadIsVisible();
+									threadClick();
+								}
+								break;
+							}
+							case KeyboardController.PREVIOUS_THREAD:
+								if (lstThreads.selectedItem != null && lstThreads.selectedIndex > 0)
+								{
+									lstThreads.selectedIndex--;
+									selectedThreadID = lstThreads.selectedItem.id; 
+									selectedReplyID = ''; 									
+									ensureThreadIsVisible();
+									threadClick();
+								}
+								break;
+							case KeyboardController.NEXT_THREAD:
+								if (lstThreads.selectedItem != null && lstThreads.selectedIndex < threads.length - 1)
+								{
+									lstThreads.selectedIndex++;
+									selectedThreadID = lstThreads.selectedItem.id; 
+									selectedReplyID = ''; 									
+									ensureThreadIsVisible();
+									threadClick();
+								}							
+								break;
+							case KeyboardController.PREVIOUS_PAGE:
+								if (currentPage > 0 && !progressBar.visible)
+								{
+									currentPage--;
+									refreshStory();
+								}
+								break;
+							case KeyboardController.NEXT_PAGE:
+								if (currentPage < lastPage && !progressBar.visible)
+								{
+									currentPage++;
+									refreshStory();
+								}
+								break;
+							/*case KeyboardController.OPEN_STORY:
+								txtStory.visible = !txtStory.visible;
+								break;*/
+							case KeyboardController.NEW_THREAD:
+								composeReply(0);
+								break;
+							case KeyboardController.REPLY:
+								if (lstReplies.selectedItem != null)
+									composeReply(lstReplies.selectedItem.id);
+								break;
+							case KeyboardController.PIN_THREAD: 
+								pinThread();
+								break;
+							case KeyboardController.COLLAPSE_THREAD: 
+								collapseThread();
+								break;
+							case KeyboardController.MARK_LOL:
+								lolClick('lol');
+								break;
+							case KeyboardController.MARK_INF:
+								lolClick('inf');
+								break;
+							case KeyboardController.OPEN_LOL_PAGE:
+								MenuController.menuClick(this, 'lol', noop, noop, noop, noop); 
+								break;
+							/*case KeyboardController.SET_BOOKMARK:
+								tag();
+								break;
+							case KeyboardController.OPEN_BOOKMARKS:
+								MenuController.menuClick(this, 'organize', noop, noop, noop, noop);
+								break;*/
+							case KeyboardController.OPEN_SHACKMESSAGES:
+								MenuController.menuClick(this, 'shackmessages', noop, noop, noop, noop);
+								break;
+							case KeyboardController.OPEN_SEARCH:
+								MenuController.menuClick(this, 'search', noop, noop, noop, noop);
+								break;
+							case KeyboardController.SEARCH_POST_HISTORY:
+								MenuController.menuClick(this, 'posthistory', noop, noop, noop, noop);
+								break;
+							case KeyboardController.SEARCH_VANITY:
+								MenuController.menuClick(this, 'vanitysearch', noop, noop, noop, noop);
+								break;
+							case KeyboardController.SEARCH_REPLIES:
+								MenuController.menuClick(this, 'replies', noop, noop, noop, noop);
+								break;
+						}
+					}
+				}				
+			}
+			
+			private function ensureThreadIsVisible() : void
+			{
+				if (lstThreads.selectedIndex < lstThreads.verticalScrollPosition)
+					lstThreads.verticalScrollPosition = lstThreads.selectedIndex;
+				if (lstThreads.selectedIndex > lstThreads.verticalScrollPosition + lstThreads.rowCount - 2)
+					lstThreads.verticalScrollPosition = lstThreads.selectedIndex - lstThreads.rowCount + 2;
+			}
+			
+			private function ensureReplyIsVisible() : void
+			{
+				if (lstReplies.selectedIndex < lstReplies.verticalScrollPosition)
+					lstReplies.verticalScrollPosition = lstReplies.selectedIndex;
+				if (lstReplies.selectedIndex > lstReplies.verticalScrollPosition + lstReplies.rowCount - 2)
+					lstReplies.verticalScrollPosition = lstReplies.selectedIndex - lstReplies.rowCount + 2;
+			}
+			
+			private function restoreSelectedReply(haystack : ArrayCollection, replyID : Object) : void
+			{
+				var reply : Object;
+				
+				for each (reply in haystack)
+				{
+					if (reply.id.toString() == replyID.toString())
+					{
+						lstReplies.selectedItem = reply;
+						replyClick();
+					}
+				}
+			}
+			
+			private function tag() : void
+			{
+				if (lstReplies.selectedItem == null)
+					return;
+				
+				markInProgress = true;
+				toolbar.repaint();
+				
+				chattyController.toggleBookmark(this.storyID, lstReplies.selectedItem, 
+					function success() : void
+					{
+						markInProgress = false;
+						toolbar.repaint();
+						Interface.forceRepaint(lstThreads);
+						Interface.forceRepaint(lstReplies);
+					},
+					function failure() : void
+					{
+						markInProgress = false;
+						toolbar.repaint();
+					});
+			}
+			
+			private function menuClick(event : MenuEvent) : void
+			{
+				MenuController.menuClick(
+					this, event.item.data, 
+					function repaint() : void
+					{
+						Interface.forceRepaint(lstThreads);
+						Interface.forceRepaint(lstReplies);
+					},
+					function reparse() : void
+					{
+						parseThreads();
+						parseReplies();
+					},
+					function reload() : void
+					{
+						setFontSizes();
+						setColors();
+						parseThreads();
+						parseReplies();
+					},
+					jumpCallback);
+			}
+			
+			private function tagMenuClick(event : MenuEvent) : void
+			{
+				lolClick(event.item.data);
+			}
+			
+			// Used with the Loading dialog.
+			private function jumpCallback(data : Object, story : int, page : int, thread : int, reply : int) : void
+			{
+				storyID = story;
+				currentPage = page;
+				selectedThreadID = thread;
+				selectedReplyID = reply.toString();
+				threadsData = data;
+				parseThreads();
+				restoreSelectedReply(replies, selectedReplyID);
+				ensureReplyIsVisible();
+				activate();
+			}
+
+			private function updateMenu() : void
+			{
+				menuProvider = MenuController.getMenuItems();
+			}
+						
+			private function showStories() : void
+			{
+				var wnd : DisplayObjectContainer = this;
+				btnStory.enabled = false;
+
+				chattyController.getStoriesMenuData(storyID,
+					function success(data : ArrayCollection) : void
+					{
+		                var menu : Menu = Menu.createMenu(wnd, data, false);
+		                menu.labelField = "label";
+		                menu.iconField  = "icon";
+		                menu.setStyle("openDuration", 0);
+		                menu.addEventListener("itemClick", 
+		                	function(event : MenuEvent) : void
+		                	{
+		                		storyID = int(event.item.data);
+		                		currentPage = 1;
+		                		refreshStory();
+		                	});
+		                
+		                menu.show(btnStory.x + hDivider.x + 2, btnStory.y + btnStory.height + hDivider.y);
+		                
+		                stories = data;
+						btnStory.enabled = true;
+					},
+					function failure() : void
+					{
+						btnStory.enabled = true;
+					});
+			}
+			
+			private function showPages() : void
+			{
+				var provider : ArrayCollection = new ArrayCollection();
+				var i : int;
+				var menu : Menu;
+				
+				for (i = 1; i <= lastPage; i++)
+				{
+					provider.addItem({
+						label: i.toString(), 
+						data:  i,
+						icon:  currentPage == i ? Icons.Checkmark16 : null
+						});
+				}
+				
+				provider.addItem({label: "Exile", data: -1, icon: currentPage == i ? "icoCheckmark" : ""});
+				
+                menu = Menu.createMenu(this, provider, false);
+                menu.labelField = "label";
+                menu.iconField = "icon";
+                menu.setStyle("openDuration", 0);
+                menu.addEventListener("itemClick", 
+                	function(event : MenuEvent) : void
+                	{
+                		currentPage = int(event.item.data);
+                		refreshStory();                		
+                	});
+                
+                menu.show(btnPage.x + hDivider.x + 2, btnPage.y + btnPage.height + hDivider.y);
+			}
+
+			private function authorClick() : void
+			{
+				new Profile().go(lstReplies.selectedItem.author, this);
+			}
+			
+			private function setColors() : void
+			{
+				if (defaultColors == null)
+				{
+					defaultColors = [
+						canvasThreads.getStyle("backgroundColor"),
+						canvasThreads.getStyle("color"),
+						canvasReply.getStyle("backgroundColor"),
+						canvasReply.getStyle("color"),
+						canvasReplyHeader.getStyle("backgroundColor"),
+						canvasReplyHeader.getStyle("color"),
+						lstThreads.getStyle("backgroundColor"),
+						lstThreads.getStyle("color"),
+						lstThreads.getStyle("alternatingItemColors"),
+						lstThreads.getStyle("themeColor"),
+						lstThreads.getStyle("selectionColor"),
+						lstThreads.getStyle("textSelectedColor"),
+						lstReplies.getStyle("backgroundColor"),
+						lstReplies.getStyle("color"),
+						lstReplies.getStyle("alternatingItemColors"),
+						lstReplies.getStyle("themeColor"),
+						lstReplies.getStyle("selectionColor"),
+						txtReply.getStyle("backgroundColor"),
+						txtReply.getStyle("color"),
+						txtReply.getStyle("themeColor"),
+						colThreadAuthor.getStyle("color"),
+						colReplyAuthor.getStyle("color"),
+						btnAuthor.getStyle("color"),
+						btnAuthor.getStyle("textRollOverColor"),
+						btnStory.getStyle("textRollOverColor"),
+						btnPage.getStyle("textRollOverColor"),
+						txtPermalink.getStyle("backgroundColor"),
+						txtPermalink.getStyle("color"),
+						hDivider.getStyle("backgroundColor")
+					];
+					
+					shackColors = [
+						"#252525",
+						"#FFFFFF",
+						"#222222",
+						"#FFFFFF",
+						"#252525",
+						"#FFFFFF",
+						"#222222",
+						"#FFFFFF",
+						["#222222", "#252525"],
+						"#363636",
+						"#363636",
+						"#FFFFFF",
+						"#222222",
+						"#FFFFFF",
+						["#222222", "#252525"],
+						"#363636",
+						"#363636",
+						"#222222",
+						"#FFFFFF",
+						"#333333",
+						"#FFBA0B",
+						"#FFBA0B",
+						"#FFBA0B",
+						"#FFFFFF",
+						"#FFFFFF",
+						"#FFFFFF",
+						"#222222",
+						"#FFFFFF",
+						"#363636"
+					];
+				}
+				
+				var colors : Array = (OptionsStorage.invertedColors ? shackColors : defaultColors);
+				var i : int = 0;
+				canvasThreads.setStyle("backgroundColor", colors[i++]);
+				canvasThreads.setStyle("color", colors[i++]);
+				canvasReply.setStyle("backgroundColor", colors[i++]);
+				canvasReply.setStyle("color", colors[i++]);
+				canvasReplyHeader.setStyle("backgroundColor", colors[i++]);
+				canvasReplyHeader.setStyle("color", colors[i++]);
+				lstThreads.setStyle("backgroundColor", colors[i++]);
+				lstThreads.setStyle("color", colors[i++]);
+				lstThreads.setStyle("alternatingItemColors", colors[i++]);
+				lstThreads.setStyle("themeColor", colors[i++]);
+				lstThreads.setStyle("selectionColor", colors[i++]);
+				lstThreads.setStyle("textSelectedColor", colors[i++]);
+				lstReplies.setStyle("backgroundColor", colors[i++]);
+				lstReplies.setStyle("color", colors[i++]);
+				lstReplies.setStyle("alternatingItemColors", colors[i++]);
+				lstReplies.setStyle("themeColor", colors[i++]);
+				lstReplies.setStyle("selectionColor", colors[i++]);
+				txtReply.setStyle("backgroundColor", colors[i++]);
+				txtReply.setStyle("color", colors[i++]);
+				txtReply.setStyle("themeColor", colors[i++]);
+				colThreadAuthor.setStyle("color", colors[i++]);
+				colReplyAuthor.setStyle("color", colors[i++]);
+				btnAuthor.setStyle("color", colors[i++]);
+				btnAuthor.setStyle("textRollOverColor", colors[i++]);
+				btnNewPosts.setStyle("textRollOverColor", colors[i++]);
+				btnPage.setStyle("textRollOverColor", colors[i++]);
+				txtPermalink.setStyle("backgroundColor", colors[i++]);
+				txtPermalink.setStyle("color", colors[i++]);
+				//hDivider.setStyle("backgroundColor", colors[i++]);
+
+				if (colors[6] is int)
+					txtReply.htmlText = "<body bgcolor='#" + (colors[6] as int).toString(16) + "'></body>";
+				else
+					txtReply.htmlText = "<body bgcolor='" + colors[6].toString() + "'></body>";
+				
+				var font : Object = (OptionsStorage.fontSmoothingType == 1 ? "TahomaAdvanced" : Interface.getInterfaceFont());
+				
+				for each (var obj : Object in [lstThreads, lstReplies, lblPage, lblBy, txtPermalink, 
+				                               lblDate, btnStory, btnPage, btnAuthor])
+				{
+					obj.setStyle("fontFamily", font);
+				}
+			}
+			
+			private function pinThread() : void
+			{
+				var which : int = (OptionsStorage.threadPinStatus(storyID, lstThreads.selectedItem.id) == OptionsStorage.PIN)
+				                ? OptionsStorage.NORMAL : OptionsStorage.PIN;
+				OptionsStorage.pinCollapseThread(storyID, lstThreads.selectedItem, which);
+				parseThreads();
+			}
+			
+			private function collapseThread() : void
+			{
+				var which : int = (OptionsStorage.threadPinStatus(storyID, lstThreads.selectedItem.id) == OptionsStorage.COLLAPSE)
+				                ? OptionsStorage.NORMAL : OptionsStorage.COLLAPSE;
+				OptionsStorage.pinCollapseThread(storyID, lstThreads.selectedItem, which);
+				parseThreads();
+			}
+			
+			private function showStoryErrorDetails() : void
+			{
+				new ErrorDetails().go(storyErrorDetails, this);
+			}
+			
+			private function showThreadErrorDetails() : void
+			{
+				new ErrorDetails().go(threadErrorDetails, this);
+			}
+			
+			private function loadThreads() : void
+			{
+				var wnd : DisplayObject = this;
+				progressBarPush();
+				chattyController.loadStory(storyID, currentPage,
+					function(result : Object) : void
+					{
+						progressBarPop();
+						threadsData = result;
+						parseThreads();
+					}, 
+					function(event : FaultEvent) : void
+					{
+						progressBarPop();
+						new MessageBox().go(wnd, chattyController.buildErrorString(event));
+					});
+			}
+			
+			private function parseThreads() : void
+			{
+				var thread     : Object = null;
+				var selected   : Object = null;
+				var html       : String = "";
+
+				// Generate the HTML for the story preview pane.
+				html = 
+					//"<style>* { font-family: Tahoma; font-size: 12px; } body { margin: 10px; }</style>" +
+					ChattyController.formatReplyHTML(
+					"<h1>" + threadsData.story_name + "</h1>" +
+					"By " + threadsData.story_author + ".  " + threadsData.story_date + "<br><br>" + 
+					threadsData.story_text, true, true);	
+				(txtStory.htmlHost as HTMLHostWithClicks).text = html;
+				txtStory.htmlText = html;
+
+				threads = chattyController.augmentStory(threadsData);
+
+				storyID        = threadsData.story_id;
+				storyName      = threadsData.story_name
+				btnStory.label = storyName;
+				currentPage    = int(threadsData.current_page);
+				lastPage       = int(threadsData.last_page);
+
+				if (OptionsStorage.customTitle == '')
+					title = /*threadsData.story_name + " - " +*/ baseTitle;
+				else
+					title = OptionsStorage.customTitle;
+				
+				btnPage.label = threadsData.current_page.toString() + " of " + threadsData.last_page.toString();
+
+				if (threadsData.story_id == 0 || threads.length == 0)
+				{
+					progressBarPop();
+					//new MessageBox().go(this, "No threads were returned by the server.");
+					boxThreads.enabled = true;
+				}
+
+				// Find the currently selected thread in the new thread list.  It may have
+				// bumped to the next page.
+				for each (thread in threads)
+				{
+					if (thread.id == selectedThreadID)
+					{
+						selected = thread;
+						break;
+					}
+				}
+
+				// Make sure a thread on this page has been selected.  The thread they
+				// were looking at may have bumped to the next page.
+				if (selected == null && threads.length > 0)
+					selected = threads[0];
+
+				if (selected != null)
+				{
+					lstThreads.selectedItem = selected;
+					selectedThreadID = selected.id;
+				}
+				progressBarPop();
+				
+				openThread();
+				
+				System.gc();
+			}
+			
+			private function showTagMenu() : void
+			{
+                var menu : Menu = Menu.createMenu(this, MenuController.getTagMenuItems(), false);
+                menu.labelField = "label";
+                menu.iconField = "icon";
+                menu.setStyle("openDuration", 0);
+                menu.addEventListener("itemClick", tagMenuClick);
+
+                var rect : Rectangle = toolbar.getButtonBounds("tag");
+                if (rect == null)
+                	return;
+                
+                menu.show(rect.x + 2, rect.y + rect.height - 1);
+                if (menu.x + menu.width > menu.parent.width)
+                	menu.x = menu.parent.width - menu.width;
+			}
+			
+			private function showSearch() : void
+			{
+				var event : MenuEvent = new MenuEvent(MenuEvent.ITEM_CLICK);
+				event.item = { data: 'search' };
+				menuClick(event);
+			}
+			
+			private function parseReplies() : void
+			{
+				if (lstThreads.selectedItem == null)
+				{
+					replies = null;
+				}
+				else
+				{
+					replies = chattyController.augmentThread(lstThreads.selectedItem.replies, storyID, lstThreads.selectedItem.id);
+					lstReplies.selectedIndex = 0;
+					replyClick();
+				}
+			}
+			
+			private function sendUserMessageClick() : void
+			{
+				if (lstReplies.selectedItem == null)
+					return;
+				
+				new ComposeShackmessage().go(this, lstReplies.selectedItem.author, null, null,
+					function() : void
+					{
+					});			
+			}
+			
+			private function toolbarClick(event : ToolbarEvent) : void
+			{
+				function noop() : void
+				{ }
+				
+				switch (event.command)
+				{
+					case 'menu':
+						this.showMenu();
+						break;
+					case 'new_thread':
+						composeReply(0);
+						break;
+					/*case 'refresh':
+						if (!progressBar.visible)
+							refresh();
+						break;
+					case 'read_story':
+						txtStory.visible = !txtStory.visible;
+						break;*/
+					case 'pin_thread':
+						pinThread();
+						break;
+					case 'collapse_thread':
+						collapseThread();
+						break;
+					case 'messages':
+						MenuController.menuClick(this, 'shackmessages', noop, noop, noop, noop);
+						break;
+					case 'search':
+						MenuController.menuClick(this, 'search', noop, noop, noop, noop);
+						break;
+					/*case 'bookmark':
+						tag();
+						break;*/
+					case 'tag':
+						showTagMenu();
+						break;
+					case 'reply':
+						if (lstReplies.selectedItem != null)
+							composeReply(lstReplies.selectedItem.id);
+						break;
+				}
+			}
+			
+			private var progressBarRefCount : int = 0;
+			
+			private function progressBarPush() : void
+			{
+				/*progressBarRefCount++;
+				if (progressBarRefCount > 1 && progressBar.visible == false)
+				{
+					progressBar.visible = true;
+					pole.start();
+					//new MessageBox().go(this, "Whoops!  Progressbar reference count is greater than 1, yet the progressbar wasn't showing.");
+				}
+				if (progressBar.visible == false)
+				{
+					progressBar.visible = true;
+					pole.start();
+				}*/
+			}
+			
+			private function progressBarPop() : void
+			{
+				/*progressBarRefCount--;
+				if (progressBarRefCount == 0)
+				{
+					progressBar.visible = false;
+					pole.stop();
+				}
+				else if (progressBarRefCount < 0)
+				{
+					progressBarRefCount = 0;
+					pole.stop();
+					//new MessageBox().go(this, "Whoops!  Progressbar reference count is less than 0.");
+				}*/
+			}
+		]]>
+	</mx:Script>
+
+<!-- Toolbar -->	
+	<ns1:Toolbar id="toolbar" left="0" top="0" right="0" buttonClick="toolbarClick(event)" toolbarName="Main Window">
+		<ns1:dataProvider>
+			<mx:ArrayCollection>
+				<mx:Object label="New Thread" command="new_thread" 
+					enabled="true" 
+					largeIcon="{Icons.DocumentAdd32}" 
+					smallIcon="{Icons.DocumentAdd16}"
+					evictOrder="8"/>
+				<!--<mx:Object label="Refresh" command="refresh" 
+					enabled="true" 
+					largeIcon="{Icons.Refresh32}" 
+					smallIcon="{Icons.Refresh16}"
+					evictOrder="9"/>
+				<mx:Object label="Story" command="read_story" 
+					enabled="true"
+					largeIcon="{Icons.Story32}" 
+					smallIcon="{Icons.Story16}"
+					evictOrder="3"/>-->
+				<mx:Object command="separator"
+					evictOrder="7"/>
+				<mx:Object label="Pin" command="pin_thread" 
+					enabled="true"
+					largeIcon="{Icons.Pin32}" 
+					smallIcon="{Icons.Pin16}"
+					evictOrder="7"/>
+				<mx:Object label="Collapse" command="collapse_thread" 
+					enabled="true"
+					largeIcon="{Icons.Trash32}" 
+					smallIcon="{Icons.Trash16}"
+					evictOrder="6"/>
+				<mx:Object command="separator"
+					evictOrder="9"
+					badge="0"/>
+				<mx:Object label="Messages" command="messages" 
+					enabled="true"
+					largeIcon="{Icons.getMailIcon(newMessageCount)}" 
+					smallIcon="{Icons.Mail16}"
+					evictOrder="2"/>
+				<mx:Object label="Search" command="search" 
+					enabled="true"
+					largeIcon="{Icons.Search32}" 
+					smallIcon="{Icons.Search16}"
+					evictOrder="1"/>
+				<mx:Object command="separator"
+					evictOrder="2"/>
+				<mx:Object label="Menu" command="menu" 
+					enabled="true"
+					largeIcon="{Icons.ArrowDown32}" 
+					smallIcon="{Icons.ArrowDown16}"
+					evictOrder="11"/>
+					
+				<mx:Object command="gap"/>
+					
+				<!--<mx:Object label="Bookmark" command="bookmark" 
+					enabled="{!markInProgress}"
+					largeIcon="{Icons.Star32}"
+					smallIcon="{Icons.Star16}"
+					evictOrder="4"/>-->
+				<mx:Object label="Tag…" command="tag" 
+					enabled="true"
+					largeIcon="{Icons.Tag32}"
+					smallIcon="{Icons.Tag16}"
+					evictOrder="5"/>
+				<!--<mx:Object command="separator"
+					evictOrder="5"/>-->
+				<mx:Object label="Reply" command="reply" 
+					enabled="true"
+					largeIcon="{Icons.Pencil32}"
+					smallIcon="{Icons.Pencil16}"
+					evictOrder="10"/>
+			</mx:ArrayCollection>
+		</ns1:dataProvider>
+	</ns1:Toolbar>
+
+<!-- Client area -->
+	<mx:HDividedBox liveDragging="true" top="{toolbar.height - 2}" bottom="-1" left="-1" right="-1" id="hDivider">
+		<mx:Canvas backgroundColor="#ffffff" width="40%" height="100%" minHeight="100" minWidth="350" borderStyle="solid" id="boxThreads">
+			<mx:Canvas height="25" width="100%" borderStyle="none" backgroundColor="#F2F2F2" id="canvasThreads">
+				<mx:LinkButton  paddingTop="2" paddingBottom="0" y="0" fontWeight="bold" label="" id="btnStory" textAlign="left" height="24" 
+					icon="@Embed(source='img/DownArrowLeft16.png')" labelPlacement="left" click="showStories()" maxWidth="300" width="49" x="278" visible="false"/>
+				<mx:Label text="Page:" y="3" right="86" id="lblPage"/>
+				<mx:LinkButton  paddingTop="2" paddingBottom="0" y="0" fontWeight="bold" label="" id="btnPage" textAlign="left" height="24" 
+					icon="@Embed(source='img/DownArrowLeft16.png')" labelPlacement="left" width="86" right="3" click="showPages()"/>
+				<mx:HRule y="24" left="0" right="0" height="1"/>
+				<mx:LinkButton x="0" y="0" textAlign="left" height="24" labelPlacement="right" paddingTop="2" paddingBottom="0" paddingLeft="4" id="btnNewPosts" click="refreshStory()" label="Loading..." fontWeight="normal" enabled="false"
+					icon="{newPostsExist ? Icons.Refresh16 : null}"/>
+			</mx:Canvas>
+			<mx:DataGrid top="25" height="100%" width="100%" minWidth="300" dataProvider="{threads}" id="lstThreads" 
+					showHeaders="false" verticalGridLines="false" fontSize="11" change="selectedThreadID = lstThreads.selectedItem.id; selectedReplyID = ''; threadClick();" borderStyle="none" useRollOver="false" selectionDuration="0">
+				<mx:columns>
+					<!-- The widths for these columns are set in resize() -->
+					<mx:DataGridColumn headerText="" width="0"/>
+					<mx:DataGridColumn headerText="" dataField="reply_count" itemRenderer="renderers.ReplyCountRenderer" resizable="false" id="colThreadCount"/>
+					<mx:DataGridColumn headerText="" id="colThreadPreview" dataField="preview" itemRenderer="renderers.ThreadRenderer"/>
+					<mx:DataGridColumn headerText="" dataField="author" id="colThreadAuthor" resizable="false" itemRenderer="renderers.ThreadRenderer"/>
+					<mx:DataGridColumn headerText="" dataField="category" id="colThreadCategory" resizable="false" itemRenderer="renderers.CategoryRenderer"/>
+				</mx:columns>
+			</mx:DataGrid>
+			<mx:HTML width="100%" top="25" bottom="0" left="0" id="txtStory" visible="false"/>
+		</mx:Canvas>
+		<mx:VDividedBox liveDragging="true" height="100%" width="60%" id="vDivider" minWidth="300">
+			<mx:Canvas backgroundColor="#ffffff" width="100%" height="25%" minHeight="100" borderStyle="solid" id="canvasReply">
+				<mx:Canvas height="25" width="100%" borderStyle="none" visible="{lstReplies.selectedItem != null}" backgroundColor="#F2F2F2" id="canvasReplyHeader">
+					<mx:Label text="By:" x="27" y="3" id="lblBy"/>
+					<mx:LinkButton id="btnAuthor" paddingTop="2" paddingBottom="0" x="46" y="0" fontWeight="bold" label="{lstReplies.selectedItem.author}" 
+						textAlign="left" height="24" click="authorClick()" focusAlpha="20"/>
+					<mx:Label y="3" width="193" right="5" textAlign="right" text="" id="lblDate"/>
+					<mx:HRule y="24" left="0" right="0" height="1"/>
+					<mx:LinkButton x="1" y="0" icon="{btnRefreshThread.enabled ? Icons.Refresh16 : Icons.RefreshDisabled16}" width="22" click="refreshThread()" toolTip="Refresh Thread" enabled="{!progressBar.visible}" paddingTop="4" height="24" id="btnRefreshThread" visible="false"/>
+					<mx:LinkButton x="0" y="0" icon="@Embed(source='img/Link16.png')" width="22" click="txtPermalink.visible = !txtPermalink.visible" toolTip="{txtPermalink.visible ? &quot;Hide&quot; : &quot;Show&quot;} Permalink" paddingTop="4" height="24"/>
+					<mx:LinkButton x="{btnAuthor.x + btnAuthor.width}" y="0" icon="{Icons.Mail16}" width="22" toolTip="Send message to {lstReplies.selectedItem.author}" paddingTop="4" height="24" id="btnSendMessage" click="sendUserMessageClick()"/>
+					<mx:TextInput fontSize="12" left="49" right="26" text="http://shacknews.com/laryn.x?id={lstReplies.selectedItem.id}" id="txtPermalink" visible="false" editable="false" top="-1" bottom="0" borderStyle="solid" paddingTop="3" paddingLeft="3"/>
+				</mx:Canvas>
+				<mx:HTML top="25" height="100%" width="100%" id="txtReply" useHandCursor="true"/>	
+			</mx:Canvas>
+			<mx:DataGrid top="25" height="100%" width="100%" minWidth="300" dataProvider="{replies}" id="lstReplies"
+					showHeaders="false" verticalGridLines="false" fontSize="11" change="selectedReplyID = (lstReplies.selectedItem != null) ? lstReplies.selectedItem.id : null; replyClick()" borderStyle="solid" useRollOver="false" selectionDuration="0">
+				<mx:columns>
+					<mx:DataGridColumn headerText="" width="0"/>
+					<mx:DataGridColumn headerText="" id="colReplyPreview" dataField="preview" textAlign="left" itemRenderer="renderers.ReplyRenderer"/>
+					<mx:DataGridColumn headerText="" dataField="author" id="colReplyAuthor" itemRenderer="renderers.ReplyRenderer"/>
+					<mx:DataGridColumn headerText="" dataField="category" id="colReplyCategory" resizable="false" itemRenderer="renderers.CategoryRenderer"/>
+				</mx:columns>
+			</mx:DataGrid>
+		</mx:VDividedBox>
+	</mx:HDividedBox>
+
+	<!--<mx:HRule left="0" right="0" strokeColor="#B7BABC" top="45" height="1" visible="{OptionsStorage.showToolbar}"/>-->	
+	<!--
+	<ns1:RefCountedSpinner id="progressBar" 
+		startImmediately="false" delay="65" spinnerColor="#909090" spinnerHighlightColor="#007EFF" 
+		spinnerShadowColor1="#4CA0FA" spinnerShadowColor2="#99C3F5" spinnerThickness="5" spinnerLineThickness="2" spinnerType="circles"
+		height="{OptionsStorage.showToolbar ? 32 : 16}" width="{OptionsStorage.showToolbar ? 32 : 16}" y="{OptionsStorage.showToolbar ? 7 : 4}" x="{OptionsStorage.showToolbar ? 52 : 4}"/>
+	-->
+	<mx:Canvas visible="false" width="153" height="40" bottom="-1" left="-1" backgroundColor="#F2F2F2" borderStyle="solid" id="progressBar">
+		<ns1:BarberPole x="10" y="11" width="50" height="16" id="pole"/>
+		<mx:Label x="68" y="10" text="Loading..."/>
+	</mx:Canvas>
+</mx:WindowedApplication>

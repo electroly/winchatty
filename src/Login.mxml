@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="132" width="272" 
+	 defaultButton="{btnOK}" title="Login" xmlns:ns1="*" creationComplete="creationComplete()" showStatusBar="false" 
+	 showGripper="false" backgroundColor="#F2F2F2" resizable="false" minimizable="false" maximizable="false"
+	 systemChrome="standard" type="normal" closing="closing()">
+
+	<mx:Script>
+		<![CDATA[
+			import services.ChattyService;
+			import controllers.ChattyController;
+			import util.*;
+
+			private var doneCallback : Function;
+			private var isOpen : Boolean = false;
+			
+			// The Login window is singleton.
+			private static var _instance : Login = null;
+			public static function get instance() : Login
+			{
+				if (_instance == null)
+					_instance = new Login();
+				return _instance;
+			} 
+			
+			public function go(parent : DisplayObject, callback : Function) : void
+			{
+				if (isOpen == true)
+				{
+					activate();
+					return;
+				}
+				
+				isOpen = true;
+				
+				doneCallback = callback;
+				
+				Interface.makeWindowModal(this, parent);
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function creationComplete() : void
+			{
+				OptionsStorage.load();
+				txtUsername.text = OptionsStorage.username;
+				txtPassword.text = OptionsStorage.password;
+				txtUsername.setFocus();
+			}
+			
+			private function closing() : void
+			{
+				isOpen    = false;
+				_instance = null;
+			}
+			
+			private function save() : void
+			{
+				var wnd : Window = this;
+				this.enabled = false;
+				var controller : ChattyController = new ChattyController();
+				controller.verifyCredentials(txtUsername.text, txtPassword.text,
+					function success() : void
+					{
+						OptionsStorage.username = txtUsername.text;
+						OptionsStorage.password = txtPassword.text;
+						OptionsStorage.save();
+						doneCallback();
+						close();
+					},
+					function failure(error : String) : void
+					{
+						new MessageBox().go(wnd, error, null, 0, 
+							function() : void
+							{
+								wnd.enabled = true;
+							}); 
+					});
+			}
+		]]>
+	</mx:Script>
+	<mx:Label x="10" y="12" text="Username:"/>
+	<mx:TextInput y="10" fontWeight="bold" id="txtUsername" left="92" right="10"/>
+	<mx:Label x="10" y="45" text="Password:"/>
+	<mx:TextInput y="43" displayAsPassword="true" fontWeight="bold" id="txtPassword" left="92" right="10"/>
+
+	<mx:Button label="Log in" width="76" id="btnOK" styleName="primaryButton" click="save()" right="94" bottom="10"/>
+	<mx:Button label="Cancel" width="76" click="close()" right="10" bottom="10"/>
+	
+ </mx:Window>

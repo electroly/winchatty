@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="346" width="444" 
+	 title="Choose Server" xmlns:ns1="*" creationComplete="creationComplete()" enabled="false" 
+	 showStatusBar="false" showGripper="false" backgroundColor="#F2F2F2" systemChrome="standard" type="normal" 
+	 resizable="false" minimizable="false" maximizable="false" verticalScrollPolicy="off" horizontalScrollPolicy="off">
+
+	<mx:Script>
+		<![CDATA[
+			import mx.collections.ArrayCollection;
+			import util.*;
+			import controllers.*;
+			import mx.managers.PopUpManager;
+			import flash.net.URLRequest;
+
+			private var doneCallback : Function;
+			
+			public function go(parent : DisplayObject, callback : Function) : void
+			{
+				doneCallback = callback;
+				Interface.makeWindowModal(this, parent);
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function creationComplete() : void
+			{
+				// Look up the list of servers from the master server (winchatty.com)
+				var request : URLRequest = new URLRequest("http://winchatty.com/servers.txt");
+				var loader : URLLoader = new URLLoader();
+				var wnd : Servers  = this;
+				
+				loader.addEventListener(Event.COMPLETE, 
+					function(event : Event) : void
+					{
+						var data : String = loader.data as String;
+						if (data == null)
+						{
+							new MessageBox().go(wnd, "Unable to load the server list.");
+							close();
+							return;
+						}
+						
+						var rows : ArrayCollection = new ArrayCollection();
+						var lines : Array = data.split("\n");
+						var line : String;
+						for each (line in lines)
+						{
+							var parts : Array = line.split("\t");
+							if (parts.length == 2)
+							{
+								var item : Object = new Object();
+								item.name = parts[0];
+								item.url = parts[1];
+								rows.addItem(item); 
+							}			
+						}
+						
+						if (rows.length == 0)
+						{
+							new MessageBox().go(wnd, "Unable to load the server list.");
+							close();
+							return;
+						}
+						
+						lstServers.dataProvider = rows;
+						enabled = true;
+					});
+				
+				loader.load(request);
+			}
+			
+			private function save() : void
+			{
+				if (lstServers.selectedItems.length == 1)
+				{
+					doneCallback(lstServers.selectedItem.url);
+					close();
+				}
+			}
+			
+		]]>
+	</mx:Script>	
+
+	<mx:Button label="Choose" right="93" bottom="10" styleName="primaryButton" click="save()" width="75" enabled="{lstServers.selectedItems.length == 1}"/>
+	<mx:Button label="Cancel" right="10" bottom="10" width="75" click="close()"/>
+	<mx:DataGrid left="10" right="10" bottom="45" top="10" itemDoubleClick="save()" doubleClickEnabled="true" id="lstServers"
+				 allowMultipleSelection="false" editable="false" resizableColumns="false" showHeaders="false" sortableColumns="false"
+				 variableRowHeight="false" wordWrap="false" selectionDuration="0" useRollOver="false" verticalGridLines="false" borderStyle="inset">
+		<mx:columns>
+			<mx:DataGridColumn headerText="Name" dataField="name" width="1" fontWeight="bold"/>
+			<mx:DataGridColumn headerText="Gateway URL" dataField="url" width="3"/>
+		</mx:columns>
+	</mx:DataGrid>
+	
+ </mx:Window>

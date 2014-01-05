@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="96" width="204" 
+	 title="Bind Key" xmlns:ns1="*" showStatusBar="false" creationComplete="creationComplete()"
+	 showGripper="false" resizable="false" minimizable="false" maximizable="false"
+	 systemChrome="standard" type="utility" xmlns:ns2="util.*" backgroundColor="#F2F2F2">
+
+	<mx:Script>
+		<![CDATA[
+			import controllers.*;
+			import util.*;
+
+			private var success : Function;
+			private var failure  : Function;
+			[Bindable] private var key : uint = 0;
+			
+			public function go(parent : DisplayObject, success : Function, failure : Function) : void
+			{
+				this.success = success;
+				this.failure = failure;
+				
+				Interface.makeWindowModal(this, parent);
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function creationComplete() : void
+			{
+				txtKey.setFocus();
+			}
+			
+			private function keystroke(event : KeyboardEvent) : void
+			{
+				// Must be a valid keyCode here.  We will ignore key events that are just
+				// a modifier key alone. 
+				if (KeyboardController.keyCodeName(event.keyCode) == null)
+					return;
+
+				if (event.keyCode > 0)
+				{
+					key = KeyboardController.keystrokeFromEvent(event);
+					txtKey.text = KeyboardController.keystrokeName(key);
+				}
+			}
+			
+			private function okClick() : void
+			{
+				success(key);
+				close();
+			}
+			
+			private function cancelClick() : void
+			{
+				failure()
+				close();
+			}
+		]]>
+	</mx:Script>
+	<mx:Button label="Cancel" fontSize="11" height="24" click="cancelClick()" right="10" bottom="10"/>
+	<mx:Button label="OK" fontSize="11" height="24" click="okClick()" styleName="primaryButton" enabled="{key != 0}" right="81" bottom="10"/>
+	<mx:Canvas borderStyle="inset" cornerRadius="4" backgroundColor="#FFFFFF" left="10" right="10" top="10" bottom="42">
+		<mx:Label text="Press a key..." id="txtKey" fontWeight="bold" keyDown="keystroke(event)" textAlign="center" verticalCenter="0" left="0" right="0"/>
+	</mx:Canvas>
+ </mx:Window>

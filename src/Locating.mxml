@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="86" width="240" 
+	 title="WinChatty" xmlns:ns1="*" creationComplete="creationComplete()" showStatusBar="false"
+	 showGripper="false" resizable="false" minimizable="false" maximizable="false"
+	 systemChrome="standard" type="utility" xmlns:ns2="util.*" backgroundColor="#FFFFFF">
+
+	<mx:Script>
+		<![CDATA[
+			import mx.rpc.events.FaultEvent;
+			import controllers.ChattyController;
+			import util.*;
+
+			private var chattyController : ChattyController = new ChattyController();
+			private var doneCallback : Function;
+			private var failCallback : Function;
+			private var postID : int;
+			private var storyID : int;
+			private var cancel : Boolean = false;
+			
+			public function go(postID : int, storyID : int, parent : DisplayObject, doneCallback : Function, failCallback : Function) : void
+			{
+				this.doneCallback = doneCallback;
+				this.failCallback = failCallback;
+				this.postID = postID;
+				this.storyID = storyID;
+				
+				Interface.makeWindowModal(this, parent);
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+			
+			private function creationComplete() : void
+			{
+				loadingSpinner.push();
+				
+				function failure() : void
+				{
+					close();
+					failCallback();
+				}
+				
+				chattyController.locatePost(postID, storyID,
+					function success(page : int, threadID : int) : void
+					{
+						if (cancel)
+						{
+							close();
+							return;
+						}
+						
+						// We will load a special story that contains just this one thread.
+						// A workaround for the fact that threads are no longer attached to
+						// Shacknews stories.
+						storyID = -1 * threadID;
+							
+						lblStatus.text = "Loading the comments...";
+						chattyController.loadStory(storyID, page,
+							function(result : Object) : void
+							{
+								close();
+								if (!cancel)
+									doneCallback(result, storyID, page, threadID, postID);
+							}, 
+							function(event : FaultEvent) : void
+							{
+								failure();
+							});
+					},
+					failure);
+			}
+		]]>
+	</mx:Script>
+	<ns2:RefCountedSpinner height="24" width="24" startImmediately="false" delay="85" spinnerColor="#E5E5F0" id="loadingSpinner" 
+		spinnerHighlightColor="#007EFF" spinnerShadowColor1="#4CA0FA" spinnerShadowColor2="#99C3F5" spinnerThickness="5" spinnerLineThickness="2" spinnerType="circles" x="10" top="15"/>
+	<mx:Label text="Locating the parent thread..." fontWeight="normal" fontStyle="normal" top="17" right="5" left="42" id="lblStatus"/>
+	<mx:Button label="Cancel" fontSize="11" height="24" width="62" right="10" bottom="10" click="cancel = true; close();"/>
+ </mx:Window>

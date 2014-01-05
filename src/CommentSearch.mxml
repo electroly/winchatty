@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="600" width="775" minHeight="430" minWidth="675"
+	 title="WinChatty Search" xmlns:ns1="*" defaultButton="{btnOK}" creationComplete="txtSearch.setFocus()"
+	 showStatusBar="false" showGripper="true" backgroundColor="#F2F2F2" systemChrome="standard" type="normal" 
+	 resizable="true" minimizable="true" maximizable="true" xmlns:ns2="util.*" verticalScrollPolicy="off" horizontalScrollPolicy="off">
+
+	<mx:Script>
+		<![CDATA[
+			import mx.rpc.events.FaultEvent;
+			import mx.collections.ArrayCollection;
+			import controllers.ChattyController;
+			import mx.events.FlexEvent;
+			import util.*;
+
+			private var chattyController : ChattyController = new ChattyController();
+			private var loadCallback     : Function = null;
+			private var created          : Boolean = false;
+			
+			[Bindable] private var categories   : ArrayCollection = new ArrayCollection([
+				{label: "", data: ""},
+				{label: "NWS", data: "nws"},
+				{label: "Informative", data: "informative"},
+				{label: "Political", data: "political"}]);
+			
+			[Bindable] private var results      : ArrayCollection = null;
+			[Bindable] private var currentPage  : int = 1;
+			[Bindable] private var totalResults : int = 0;
+			[Bindable] private var inProgress   : Boolean = false;
+
+			public function go(parent : DisplayObject, search : String, author : String, parentAuthor : String, category : int, immediate : Boolean, loadCallback : Function) : void
+			{
+				this.loadCallback = loadCallback;
+				
+				function f() : void
+				{
+					var font : Object = (OptionsStorage.fontSmoothingType == 1 ? "TahomaAdvanced" : ["Tahoma", "Arial", "Lucida Grande"]);
+					lstResults.setStyle("fontFamily", font);
+
+					if (search != null)
+						txtSearch.text = search;
+					if (author != null)
+						txtAuthor.text = author;
+					if (parentAuthor != null)
+						txtParentAuthor.text = parentAuthor;
+					cmbCategory.selectedIndex = category; 
+					txtSearch.setFocus();
+					
+					if (immediate)
+						doSearch(1);
+				};
+				
+				if (!created)
+				{
+					addEventListener(FlexEvent.CREATION_COMPLETE,
+						function(event : FlexEvent) : void
+						{
+							f();
+							created = true;
+						});
+					
+					open(true);
+					Interface.centerWindowInParent(this, parent);
+				}
+				else
+				{
+					f();
+					activate();
+				}
+			}
+			
+			private function doSearch(page : int) : void
+			{
+				var wnd : DisplayObject = this;
+				
+				inProgress = true;
+				spinner.push();
+				
+				chattyController.search(txtSearch.text, txtAuthor.text, txtParentAuthor.text, cmbCategory.selectedItem.data, page,
+					function success(result : Object) : void
+					{
+						currentPage = page;
+						//lastPage = result.last_page;
+						results = new ArrayCollection(result as Array);
+						inProgress = false;
+						spinner.pop();
+					},
+					function failure(error : String) : void
+					{
+						new MessageBox().go(wnd, error);
+						inProgress = false;
+						spinner.pop();
+					});
+			}
+			
+			private function postClick() : void
+			{
+				navigateToURL(new URLRequest("http://www.shacknews.com/chatty?id=" + lstResults.selectedItem.id + "#item_" + lstResults.selectedItem.id));
+				
+				/*var wnd : DisplayObject = this;
+				
+				new Locating().go(lstResults.selectedItem.id, lstResults.selectedItem.story_id, this, 
+					loadCallback, 
+					function failure() : void
+					{
+						new MessageBox().go(wnd, "Unable to locate the post.");
+					});*/
+			}
+		]]>
+	</mx:Script>
+
+	<mx:Image left="0" top="0" height="45" width="100%" source="@Embed(source='img/ToolbarBg.png')" scaleContent="true" maintainAspectRatio="false"/>
+	<mx:Label y="28" text="Search" fontSize="10" textAlign="center" left="10" right="468"/>
+	<mx:TextInput y="7" id="txtSearch" fontWeight="bold" left="10" right="468" enabled="{!inProgress}" fontSize="12" borderStyle="inset" height="23"/>
+	<mx:Label y="28" text="Author" fontSize="10" textAlign="center" right="332" width="128"/>
+	<mx:TextInput y="7" width="128" id="txtAuthor" fontWeight="bold" right="332" enabled="{!inProgress}" fontSize="12" borderStyle="inset" height="23"/>
+	<mx:Label y="28" text="Parent Author" fontSize="10" textAlign="center" right="196" width="128"/>
+	<mx:TextInput y="7" width="128" id="txtParentAuthor" fontWeight="bold" right="196" enabled="{!inProgress}" fontSize="12" borderStyle="inset" height="23"/>
+	<mx:Label y="28" text="Category" fontSize="10" textAlign="center" right="75" width="113"/>
+	<mx:ComboBox y="7" fontSize="11" width="113" right="75" dataProvider="{categories}" enabled="{!inProgress}" id="cmbCategory"/>
+	<mx:Button y="2" width="56" id="btnOK" click="doSearch(1)" right="10" height="41" fontSize="12" 
+		icon="{btnOK.enabled ? Icons.Search32 : Icons.SearchDisabled32}" 
+		visible="{!inProgress}"
+		enabled="{txtSearch.text.length > 0 || txtAuthor.text.length > 0 || txtParentAuthor.text.length > 0 || cmbCategory.selectedIndex > 0}"/>
+	<ns2:RefCountedSpinner height="32" width="32" startImmediately="false" delay="85" spinnerColor="#E5E5F0" id="spinner" visible="false"
+		spinnerHighlightColor="#007EFF" spinnerShadowColor1="#4CA0FA" spinnerShadowColor2="#99C3F5" spinnerThickness="5" spinnerLineThickness="2" spinnerType="circles" right="22" top="6"/>
+
+	<mx:DataGrid left="-1" top="45" bottom="45" right="-1" editable="false" resizableColumns="false" allowMultipleSelection="false" sortableColumns="false" draggableColumns="false" 
+			selectionDuration="0" useRollOver="false" verticalGridLines="false" dataProvider="{results}" fontSize="12" enabled="{results != null &amp;&amp; !inProgress}"
+			doubleClickEnabled="true" itemDoubleClick="postClick()" id="lstResults" showHeaders="true">
+		<mx:columns>
+			<mx:DataGridColumn headerText="" width="24" dataField="category" resizable="false" itemRenderer="renderers.CategoryRenderer"/>
+			<mx:DataGridColumn headerText="Post" dataField="preview" itemRenderer="renderers.ReplyRenderer"/>
+			<mx:DataGridColumn headerText="Author" width="100" dataField="author"/>
+			<mx:DataGridColumn headerText="Date" width="200" dataField="date"/>
+		</mx:columns>
+	</mx:DataGrid>
+
+	<mx:Button icon="@Embed(source='img/Left16.png')" width="32" bottom="10" right="169" enabled="{currentPage &gt; 1 &amp;&amp; !inProgress}" click="doSearch(currentPage - 1)"/>
+	<mx:Canvas width="111" height="27" borderStyle="solid" bottom="10" right="50" cornerRadius="4" backgroundColor="#FFFFFF">
+		<mx:Label y="3" text="Page {currentPage}" textAlign="center" fontWeight="bold" left="1" right="1"/>
+	</mx:Canvas>
+	<mx:Button icon="@Embed(source='img/Right16.png')" width="32" bottom="10" right="10" enabled="{results.length == 15 &amp;&amp; !inProgress}" click="doSearch(currentPage + 1)"/>
+ </mx:Window>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="412" width="398" minHeight="200" minWidth="200"
+	 defaultButton="{btnOK}" title="Error Details" xmlns:ns1="*" showStatusBar="false" 
+	 showGripper="false" backgroundColor="#F2F2F2" resizable="true" minimizable="false" maximizable="false"
+	 systemChrome="standard" type="normal">
+
+	<mx:Script>
+		<![CDATA[
+			import mx.events.FlexEvent;
+			import util.*;
+
+			public function go(details : String, parent : DisplayObject) : void
+			{
+				this.addEventListener(FlexEvent.CREATION_COMPLETE,
+					function(event : FlexEvent) : void
+					{
+						txtDetails.text = details;
+					});
+
+				Interface.makeWindowModal(this, parent);
+				open(true);
+				Interface.centerWindowInParent(this, parent);
+			}
+		]]>
+	</mx:Script>
+
+	<mx:Button label="Close" width="76" id="btnOK" styleName="primaryButton" click="close()" right="10" bottom="10"/>
+	<mx:TextArea editable="false" left="10" right="10" top="10" bottom="45" id="txtDetails" fontFamily="Courier New"/>
+	
+ </mx:Window>

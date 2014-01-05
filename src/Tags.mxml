@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--****************************************************************************
+ *
+ *  WinChatty
+ *  Copyright (C) 2009, Brian Luft.
+ * 
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ *
+ ***************************************************************************-->
+<mx:Window xmlns:mx="http://www.adobe.com/2006/mxml" layout="absolute" height="430" width="400" minHeight="430" minWidth="400" maxWidth="600"
+	 title="Bookmarks" xmlns:ns1="*" creationComplete="creationComplete()" closing="closing()"
+	 showStatusBar="false" showGripper="true" backgroundColor="#F2F2F2" systemChrome="standard" type="normal" 
+	 resizable="true" minimizable="false" maximizable="false" close="doneCallback()" xmlns:ns2="util.*" verticalScrollPolicy="off" horizontalScrollPolicy="off">
+
+	<mx:Script>
+		<![CDATA[
+			import util.*;
+			import controllers.*;
+			import mx.managers.PopUpManager;
+			import flash.net.URLRequest;
+
+			private var doneCallback : Function;
+			private var jumpCallback : Function;
+			
+			public function go(parent : DisplayObject, callback : Function, jumpCallback : Function) : void
+			{
+				doneCallback = callback;
+				this.jumpCallback = jumpCallback;
+				
+				if (Singleton.isOpen(Tags))
+				{
+					activate();
+				}
+				else
+				{
+					open(true);
+					Interface.centerWindowInParent(this, parent);
+				}
+			}
+			
+			private function creationComplete() : void
+			{
+				spinner.push();
+
+				OptionsStorage.events.addEventListener(OptionsStorage.TAGGED_POSTS_CHANGE, taggedPostsChange);
+				BookmarkController.downloadAll(
+					function() : void 
+					{
+						spinner.pop();
+					});
+			}
+			
+			private function save() : void
+			{
+				doneCallback();
+				close();
+			}
+			
+			private function closing() : void
+			{
+				OptionsStorage.events.removeEventListener(OptionsStorage.TAGGED_POSTS_CHANGE, taggedPostsChange);
+			}
+			
+			private function taggedPostsChange(event : Event) : void
+			{
+				lstThreads.dataProvider = OptionsStorage.taggedPosts;
+			}
+			
+			private function threadClick() : void
+			{
+				if (lstThreads.selectedItem == null)
+					return;
+				
+				var wnd : Window = this;
+				
+				new Locating().go(lstThreads.selectedItem.id, lstThreads.selectedItem.story_id, this, 
+					function success(data : Object, story : int, page : int, thread : int, reply : int) : void
+					{
+						//wnd.close();
+						jumpCallback(data, story, page, thread, reply);
+					},
+					function failure() : void
+					{
+						new MessageBox().go(wnd, "Unable to locate the post.");
+					});
+			}
+			
+			private function removeTag() : void
+			{
+				var taggedThread : Object;
+				
+				if (lstThreads.selectedItems.length > 0)
+				{
+					btnRemove.enabled = false;
+					spinner.push();
+					BookmarkController.removeMark(lstThreads.selectedItems[0].id,
+						function() : void
+						{
+							spinner.pop();
+							lstThreads.dataProvider = OptionsStorage.taggedPosts;
+							if (OptionsStorage.taggedPosts.length > 0)
+								lstThreads.selectedIndex = 0;
+						});
+				}
+				
+				OptionsStorage.save();
+			}
+			
+			private function changeNote() : void
+			{
+			
+			}
+		]]>
+	</mx:Script>	
+	<mx:DataGrid minWidth="300" id="lstThreads" 
+			showHeaders="true" verticalGridLines="false" fontSize="11" doubleClick="threadClick()" doubleClickEnabled="true" 
+			useRollOver="false" editable="false" left="-1" right="-1" top="-1" bottom="45" resizableColumns="false" sortableColumns="false" variableRowHeight="false" allowMultipleSelection="false" draggableColumns="false">
+		<mx:columns>
+			<mx:DataGridColumn headerText="Preview" id="colThreadPreview" dataField="preview"/>
+			<mx:DataGridColumn width="100" headerText="Author" dataField="author" id="colThreadAuthor"/>
+			<!--<mx:DataGridColumn width="200" headerText="Note" id="colNote" dataField="note"/>-->
+		</mx:columns>
+	</mx:DataGrid>
+	<mx:Button id="btnRemove" label="Delete" icon="@Embed(source='img/Delete16.png')" click="removeTag()" enabled="{lstThreads.selectedItems.length > 0}" bottom="10" left="10"/>
+	<ns2:RefCountedSpinner width="24" startImmediately="false" delay="85" spinnerColor="#E5E5F0" id="spinner" 
+		spinnerHighlightColor="#007EFF" spinnerShadowColor1="#4CA0FA" spinnerShadowColor2="#99C3F5" spinnerThickness="5" spinnerLineThickness="2" spinnerType="circles" bottom="11" height="24" horizontalCenter="0"/>
+	<mx:Button label="Close" right="10" bottom="10" styleName="primaryButton" click="close()" width="75"/>
+	
+ </mx:Window>
