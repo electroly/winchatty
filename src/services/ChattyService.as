@@ -137,7 +137,5 @@ package services
 		{
 			call(getObject().post(username, password, parentID, storyID, body), result, fault);
 		}
-		
-		
 	}
 }

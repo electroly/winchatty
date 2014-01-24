@@ -35,6 +35,8 @@ package services
 	{
 		protected var className : String;
 		
+		private var remoteObject : RemoteObject = null;
+		
 		/**
 		 * Connects to the WinChatty.com gateway.  
 		 * @param className Must match the PHP class name.
@@ -42,24 +44,17 @@ package services
 		public function Service(className : String) : void
 		{
 			this.className = className;
+			remoteObject = new RemoteObject();
+			remoteObject.source = className;
+			remoteObject.destination = className;
+        	remoteObject.requestTimeout = 30;
+			var url : String = "https://winchatty.com/service/gateway";
+        	remoteObject.channelSet = new ChannelSet();
+        	remoteObject.channelSet.addChannel(new AMFChannel(null, url));
 		}
 		
 		protected function getObject(forceWinChattyURL : Boolean = false) : RemoteObject
 		{
-			var url : String;
-			var remoteObject : RemoteObject = new RemoteObject();
-
-			remoteObject.source = className;
-			remoteObject.destination = className;
-            remoteObject.requestTimeout = 30;
-			
-			if (forceWinChattyURL)
-				url = "http://winchatty.com/service/gateway";
-			else
-				url = OptionsStorage.gatewayURL;
-			
-            remoteObject.channelSet = new ChannelSet();
-            remoteObject.channelSet.addChannel(new AMFChannel(null, url));
             return remoteObject;
 		}
 		
@@ -70,9 +65,10 @@ package services
 		 * @param result (ResultEvent) Called upon success.
 		 * @param fault  (FaultEvent) Called upon failure.
 		 */
-		protected function call(token : AsyncToken, result : Function, fault : Function) : void
+		protected function call(token : AsyncToken, result : Function, fault : Function) : AsyncToken
 		{
 			token.addResponder(new Responder(result, fault));
+			return token;
 		}
 	}
 }

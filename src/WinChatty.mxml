@@ -98,7 +98,7 @@
 				var wnd : DisplayObject = this;
 
 				// Every 1 minutes, poll the number of Shackmessages.
-				messageCountTimer = new Timer(1 * 60 * 1000);
+				messageCountTimer = new Timer(2 * 60 * 1000);
 				
 				function pollMessageCount(event : TimerEvent) : void
 				{
@@ -129,8 +129,8 @@
 				messageCountTimer.start();
 				pollMessageCount(null);
 
-				// Every 5 seconds, poll for the event ID.
-				eventTimer = new Timer(5 * 1000);
+				// Wait for 5 second intervals until a post arrives.
+				eventTimer = new Timer(5000, 1);
 				
 				eventTimer.addEventListener(TimerEvent.TIMER, pollEventId);
 				eventTimer.start();
@@ -154,13 +154,7 @@
 						currentEventId = id;
 						if (lastRefreshEventId != 0 && lastRefreshEventId != currentEventId)
 						{
-							var count : int = currentEventId - lastRefreshEventId;
-							
-							if (count == 1)
-								btnNewPosts.label = 'There is 1 new comment.';
-							else
-								btnNewPosts.label = 'There are ' + count + ' new comments.';
-								
+							btnNewPosts.label = 'There are new comments.';
 							btnNewPosts.setStyle("fontWeight", "bold");
 							btnNewPosts.enabled = true;
 							newPostsExist = true;
@@ -173,10 +167,16 @@
 							btnNewPosts.enabled = false;
 							newPostsExist = false;
 						}
+						
+						if (!newPostsExist)
+						{
+							eventTimer.reset();
+							eventTimer.start();
+						}
 					},
 					function failure(error : String) : void
 					{
-						btnNewPosts.label = 'Failed to retrieve the number of new comments!';
+						btnNewPosts.label = 'Failed to retrieve new comments!';
 						btnNewPosts.setStyle("fontWeight", "normal");
 						btnNewPosts.enabled = false;
 						newPostsExist = false;
@@ -235,7 +235,7 @@
 			{
 				var obj : Object;
 				
-				btnNewPosts.label = 'Loading...';
+				btnNewPosts.label = 'Refreshing...';
 				btnNewPosts.enabled = false;
 				btnNewPosts.setStyle('fontWeight', 'normal');
 				newPostsExist = false;
@@ -1279,7 +1279,7 @@
 			
 			private function progressBarPush() : void
 			{
-				/*progressBarRefCount++;
+				progressBarRefCount++;
 				if (progressBarRefCount > 1 && progressBar.visible == false)
 				{
 					progressBar.visible = true;
@@ -1290,12 +1290,12 @@
 				{
 					progressBar.visible = true;
 					pole.start();
-				}*/
+				}
 			}
 			
 			private function progressBarPop() : void
 			{
-				/*progressBarRefCount--;
+				progressBarRefCount--;
 				if (progressBarRefCount == 0)
 				{
 					progressBar.visible = false;
@@ -1306,7 +1306,7 @@
 					progressBarRefCount = 0;
 					pole.stop();
 					//new MessageBox().go(this, "Whoops!  Progressbar reference count is less than 0.");
-				}*/
+				}
 			}
 		]]>
 	</mx:Script>
@@ -1415,13 +1415,13 @@
 		<mx:VDividedBox liveDragging="true" height="100%" width="60%" id="vDivider" minWidth="300">
 			<mx:Canvas backgroundColor="#ffffff" width="100%" height="25%" minHeight="100" borderStyle="solid" id="canvasReply">
 				<mx:Canvas height="25" width="100%" borderStyle="none" visible="{lstReplies.selectedItem != null}" backgroundColor="#F2F2F2" id="canvasReplyHeader">
-					<mx:Label text="By:" x="27" y="3" id="lblBy"/>
-					<mx:LinkButton id="btnAuthor" paddingTop="2" paddingBottom="0" x="46" y="0" fontWeight="bold" label="{lstReplies.selectedItem.author}" 
+					<mx:Label text="By:" x="53" y="3" id="lblBy"/>
+					<mx:LinkButton id="btnAuthor" paddingTop="2" paddingBottom="0" x="72" y="0" fontWeight="bold" label="{lstReplies.selectedItem.author}" 
 						textAlign="left" height="24" click="authorClick()" focusAlpha="20"/>
 					<mx:Label y="3" width="193" right="5" textAlign="right" text="" id="lblDate"/>
 					<mx:HRule y="24" left="0" right="0" height="1"/>
-					<mx:LinkButton x="1" y="0" icon="{btnRefreshThread.enabled ? Icons.Refresh16 : Icons.RefreshDisabled16}" width="22" click="refreshThread()" toolTip="Refresh Thread" enabled="{!progressBar.visible}" paddingTop="4" height="24" id="btnRefreshThread" visible="false"/>
-					<mx:LinkButton x="0" y="0" icon="@Embed(source='img/Link16.png')" width="22" click="txtPermalink.visible = !txtPermalink.visible" toolTip="{txtPermalink.visible ? &quot;Hide&quot; : &quot;Show&quot;} Permalink" paddingTop="4" height="24"/>
+					<mx:LinkButton x="1" y="0" icon="{btnRefreshThread.enabled ? Icons.Refresh16 : Icons.RefreshDisabled16}" width="22" click="refreshThread()" toolTip="Refresh Thread" enabled="{!progressBar.visible}" paddingTop="4" height="24" id="btnRefreshThread"/>
+					<mx:LinkButton x="23" y="0" icon="@Embed(source='img/Link16.png')" width="22" click="txtPermalink.visible = !txtPermalink.visible" toolTip="{txtPermalink.visible ? &quot;Hide&quot; : &quot;Show&quot;} Permalink" paddingTop="4" height="24"/>
 					<mx:LinkButton x="{btnAuthor.x + btnAuthor.width}" y="0" icon="{Icons.Mail16}" width="22" toolTip="Send message to {lstReplies.selectedItem.author}" paddingTop="4" height="24" id="btnSendMessage" click="sendUserMessageClick()"/>
 					<mx:TextInput fontSize="12" left="49" right="26" text="http://shacknews.com/laryn.x?id={lstReplies.selectedItem.id}" id="txtPermalink" visible="false" editable="false" top="-1" bottom="0" borderStyle="solid" paddingTop="3" paddingLeft="3"/>
 				</mx:Canvas>
