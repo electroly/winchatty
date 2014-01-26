@@ -216,10 +216,27 @@
 						Interface.forceRepaint(lstThreads);
 						Interface.forceRepaint(lstReplies);
 					});
-				BookmarkController.downloadAll(
+				/*BookmarkController.downloadAll(
 					function() : void
 					{
 						progressBarPop();
+					});*/
+
+				var wnd : DisplayObject = this;
+				chattyController.getCurrentWinChattyVersion(
+					function success(latestVer : String) : void
+					{
+						if (latestVer != appXML.air::version)
+							new MessageBox().go(wnd, "A new version of WinChatty (" + latestVer + ") is available!", ["Update", "Cancel"], 0,
+								function(clicked : String) : void
+								{
+									if (clicked == "Update")
+										navigateToURL(new URLRequest("http://winchatty.com"));
+								}
+							);
+					},
+					function failure(error : String) : void
+					{
 					});
 			}
 			

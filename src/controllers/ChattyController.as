@@ -670,5 +670,23 @@ package controllers
 					failure(event.fault.faultString);
 				});
 		}
+		
+		/**
+		 * Gets the latest WinChatty version number.
+		 * @param success  (int) Called upon success.
+		 * @param failure  (String) Called upon error.
+		 */
+		public function getCurrentWinChattyVersion(success : Function, failure : Function) : void
+		{
+			chattyService.getCurrentWinChattyVersion(
+				function result(event : ResultEvent) : void
+				{
+					success(event.result as String);
+				},
+				function fault(event : FaultEvent) : void
+				{
+					failure(event.fault.faultString);
+				});
+		}
 	}
 }

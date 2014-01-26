@@ -31,6 +31,16 @@ package services
 		}
 		
 		/**
+		 * Gets the latest WinChatty version number. 
+		 * @param result (ResultEvent) Called upon completion.
+		 * @param fault  (FaultEvent) Called upon failure.
+		 */
+		public function getCurrentWinChattyVersion(result : Function, fault : Function) : void
+		{
+			call(getObject().getCurrentWinChattyVersion(), result, fault);
+		}
+		
+		/**
 		 * Gets a list of recent stories and their IDs. 
 		 * @param result (ResultEvent) Called upon completion.
 		 * @param fault  (FaultEvent) Called upon failure.
